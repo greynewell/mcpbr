@@ -91,9 +91,7 @@ class TestInitCommand:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "config.yaml"
 
-            result = runner.invoke(
-                main, ["init", "-o", str(output_path), "-t", "cybergym-basic"]
-            )
+            result = runner.invoke(main, ["init", "-o", str(output_path), "-t", "cybergym-basic"])
 
             assert result.exit_code == 0
 
@@ -323,4 +321,7 @@ class TestTemplatesHelp:
 
         assert result.exit_code == 0
         assert "templates" in result.output
-        assert "List available configuration templates" in result.output or "templates" in result.output
+        assert (
+            "List available configuration templates" in result.output
+            or "templates" in result.output
+        )

@@ -139,7 +139,9 @@ class StreamEventFormatter:
         # Use bold red for errors to make them stand out
         style = "bold red" if is_error else "dim"
 
-        summary = self._summarize_tool_result(result_content, tool_use_result, is_error, error_context)
+        summary = self._summarize_tool_result(
+            result_content, tool_use_result, is_error, error_context
+        )
         symbol = "!" if is_error else "<"
         label = "ERROR" if is_error else ""
         self._print_event(prefix, label, summary, style=style, symbol=symbol)
@@ -224,35 +226,35 @@ class StreamEventFormatter:
 
         # Check for HTTP error codes in content
         http_patterns = [
-            (r'\b401\b', 'http_401_unauthorized'),
-            (r'\b403\b', 'http_403_forbidden'),
-            (r'\b404\b', 'http_404_not_found'),
-            (r'\b500\b', 'http_500_server_error'),
-            (r'\b502\b', 'http_502_bad_gateway'),
-            (r'\b503\b', 'http_503_unavailable'),
+            (r"\b401\b", "http_401_unauthorized"),
+            (r"\b403\b", "http_403_forbidden"),
+            (r"\b404\b", "http_404_not_found"),
+            (r"\b500\b", "http_500_server_error"),
+            (r"\b502\b", "http_502_bad_gateway"),
+            (r"\b503\b", "http_503_unavailable"),
         ]
 
         content_str = str(content).lower()
         for pattern, error_type in http_patterns:
             if re.search(pattern, content_str):
-                error_context['error_type'] = error_type
-                error_context['http_error'] = True
+                error_context["error_type"] = error_type
+                error_context["http_error"] = True
                 break
 
         # Check for common error keywords
-        if 'unauthorized' in content_str or 'authentication' in content_str:
-            error_context['auth_error'] = True
-        if 'timeout' in content_str:
-            error_context['timeout_error'] = True
-        if 'connection' in content_str and ('refused' in content_str or 'failed' in content_str):
-            error_context['connection_error'] = True
+        if "unauthorized" in content_str or "authentication" in content_str:
+            error_context["auth_error"] = True
+        if "timeout" in content_str:
+            error_context["timeout_error"] = True
+        if "connection" in content_str and ("refused" in content_str or "failed" in content_str):
+            error_context["connection_error"] = True
 
         # Extract error from tool_use_result
         if isinstance(tool_use_result, dict):
-            if 'error' in tool_use_result:
-                error_context['tool_error'] = tool_use_result['error']
-            if 'stderr' in tool_use_result and tool_use_result['stderr']:
-                error_context['stderr'] = tool_use_result['stderr']
+            if "error" in tool_use_result:
+                error_context["tool_error"] = tool_use_result["error"]
+            if "stderr" in tool_use_result and tool_use_result["stderr"]:
+                error_context["stderr"] = tool_use_result["stderr"]
 
         return error_context
 
@@ -282,40 +284,40 @@ class StreamEventFormatter:
             error_parts = []
 
             # Add HTTP error type if detected
-            if error_context.get('http_error'):
-                error_type = error_context.get('error_type', 'http_error')
-                if '401' in error_type:
+            if error_context.get("http_error"):
+                error_type = error_context.get("error_type", "http_error")
+                if "401" in error_type:
                     error_parts.append("HTTP 401 Unauthorized - Check API credentials")
-                elif '403' in error_type:
+                elif "403" in error_type:
                     error_parts.append("HTTP 403 Forbidden - Check API permissions")
-                elif '404' in error_type:
+                elif "404" in error_type:
                     error_parts.append("HTTP 404 Not Found")
-                elif '500' in error_type:
+                elif "500" in error_type:
                     error_parts.append("HTTP 500 Internal Server Error")
-                elif '502' in error_type:
+                elif "502" in error_type:
                     error_parts.append("HTTP 502 Bad Gateway")
-                elif '503' in error_type:
+                elif "503" in error_type:
                     error_parts.append("HTTP 503 Service Unavailable")
 
             # Add authentication error context
-            if error_context.get('auth_error') and not error_context.get('http_error'):
+            if error_context.get("auth_error") and not error_context.get("http_error"):
                 error_parts.append("Authentication failed")
 
             # Add timeout context
-            if error_context.get('timeout_error'):
+            if error_context.get("timeout_error"):
                 error_parts.append("Request timed out")
 
             # Add connection error context
-            if error_context.get('connection_error'):
+            if error_context.get("connection_error"):
                 error_parts.append("Connection failed")
 
             # Add tool-specific error
-            if error_context.get('tool_error'):
+            if error_context.get("tool_error"):
                 error_parts.append(f"Tool error: {error_context['tool_error']}")
 
             # Add stderr if available
-            if error_context.get('stderr'):
-                stderr = str(error_context['stderr'])[:200]
+            if error_context.get("stderr"):
+                stderr = str(error_context["stderr"])[:200]
                 error_parts.append(f"stderr: {stderr}")
 
             # Add content if we haven't found a specific error type
@@ -327,7 +329,9 @@ class StreamEventFormatter:
 
             # If still no error details, flag it
             if not error_parts:
-                error_parts.append("MCP tool returned error with no details (check MCP server logs)")
+                error_parts.append(
+                    "MCP tool returned error with no details (check MCP server logs)"
+                )
 
             return "\n".join(error_parts)
 

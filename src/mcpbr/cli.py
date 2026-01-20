@@ -200,6 +200,12 @@ def main() -> None:
     default=None,
     help="Path to save YAML results (alternative to --output for YAML format)",
 )
+@click.option(
+    "--budget",
+    type=float,
+    default=None,
+    help="Maximum budget in USD (halts evaluation when reached)",
+)
 def run(
     config_path: Path,
     model_override: str | None,
@@ -219,6 +225,7 @@ def run(
     prompt_override: str | None,
     no_prebuilt: bool,
     yaml_output: Path | None,
+    budget: float | None,
 ) -> None:
     """Run SWE-bench evaluation with the configured MCP server.
 
@@ -268,6 +275,12 @@ def run(
     if no_prebuilt:
         config.use_prebuilt_images = False
 
+    if budget is not None:
+        if budget <= 0:
+            console.print("[red]Error: Budget must be positive[/red]")
+            sys.exit(1)
+        config.budget = budget
+
     run_mcp = not baseline_only
     run_baseline = not mcp_only
     verbose = verbosity > 0
@@ -285,6 +298,8 @@ def run(
     console.print(f"  Sample size: {config.sample_size or 'full'}")
     console.print(f"  Run MCP: {run_mcp}, Run Baseline: {run_baseline}")
     console.print(f"  Pre-built images: {config.use_prebuilt_images}")
+    if config.budget is not None:
+        console.print(f"  Budget: ${config.budget:.2f}")
     if log_file_path:
         console.print(f"  Log file: {log_file_path}")
     if log_dir_path:
@@ -419,6 +434,10 @@ max_concurrent: 4
 
 # Maximum agent iterations per task
 max_iterations: 10
+
+# Maximum budget in USD (optional)
+# Halts evaluation when budget is reached
+# budget: 5.0
 """
     output_path.write_text(example_config)
     console.print(f"[green]Created example config at {output_path}[/green]")

@@ -92,6 +92,85 @@ This harness runs two parallel evaluations for each task:
 
 By comparing these, you can measure the effectiveness of your MCP server for different software engineering tasks. See the **[MCP integration guide](https://greynewell.github.io/mcpbr/mcp-integration/)** for tips on testing your server.
 
+## Regression Detection
+
+mcpbr includes built-in regression detection to catch performance degradations between MCP server versions:
+
+### Key Features
+
+- **Automatic Detection**: Compare current results against a baseline to identify regressions
+- **Detailed Reports**: See exactly which tasks regressed and which improved
+- **Threshold-Based Exit Codes**: Fail CI/CD pipelines when regression rate exceeds acceptable limits
+- **Multi-Channel Alerts**: Send notifications via Slack, Discord, or email
+
+### How It Works
+
+A regression is detected when a task that passed in the baseline now fails in the current run. This helps you catch issues before deploying new versions of your MCP server.
+
+```bash
+# First, run a baseline evaluation and save results
+mcpbr run -c config.yaml -o baseline.json
+
+# Later, compare a new version against the baseline
+mcpbr run -c config.yaml --baseline-results baseline.json --regression-threshold 0.1
+
+# With notifications
+mcpbr run -c config.yaml --baseline-results baseline.json \
+  --regression-threshold 0.1 \
+  --slack-webhook https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+```
+
+### Use Cases
+
+- **CI/CD Integration**: Automatically detect regressions in pull requests
+- **Version Comparison**: Compare different versions of your MCP server
+- **Performance Monitoring**: Track MCP server performance over time
+- **Team Notifications**: Alert your team when regressions are detected
+
+### Example Output
+
+```
+======================================================================
+REGRESSION DETECTION REPORT
+======================================================================
+
+Total tasks compared: 25
+Regressions detected: 2
+Improvements detected: 5
+Regression rate: 8.0%
+
+REGRESSIONS (previously passed, now failed):
+----------------------------------------------------------------------
+  - django__django-11099
+    Error: Timeout
+  - sympy__sympy-18087
+    Error: Test suite failed
+
+IMPROVEMENTS (previously failed, now passed):
+----------------------------------------------------------------------
+  - astropy__astropy-12907
+  - pytest-dev__pytest-7373
+  - scikit-learn__scikit-learn-25570
+  - matplotlib__matplotlib-23913
+  - requests__requests-3362
+
+======================================================================
+```
+
+For CI/CD integration, use `--regression-threshold` to fail the build when regressions exceed an acceptable rate:
+
+```yaml
+# .github/workflows/test-mcp.yml
+- name: Run mcpbr with regression detection
+  run: |
+    mcpbr run -c config.yaml \
+      --baseline-results baseline.json \
+      --regression-threshold 0.1 \
+      -o current.json
+```
+
+This will exit with code 1 if the regression rate exceeds 10%, failing the CI job.
+
 ## Installation
 
 > **[Full installation guide](https://greynewell.github.io/mcpbr/installation/)** with detailed setup instructions.
@@ -294,6 +373,16 @@ Run SWE-bench evaluation with the configured MCP server.
 | `--log-dir PATH` | | Directory to write per-instance JSON log files |
 | `--task TEXT` | `-t` | Run specific task(s) by instance_id (repeatable) |
 | `--prompt TEXT` | | Override agent prompt (use `{problem_statement}` placeholder) |
+| `--baseline-results PATH` | | Path to baseline results JSON for regression detection |
+| `--regression-threshold FLOAT` | | Maximum acceptable regression rate (0-1). Exit with code 1 if exceeded. |
+| `--slack-webhook URL` | | Slack webhook URL for regression notifications |
+| `--discord-webhook URL` | | Discord webhook URL for regression notifications |
+| `--email-to EMAIL` | | Email address for regression notifications |
+| `--email-from EMAIL` | | Sender email address for notifications |
+| `--smtp-host HOST` | | SMTP server hostname for email notifications |
+| `--smtp-port PORT` | | SMTP server port (default: 587) |
+| `--smtp-user USER` | | SMTP username for authentication |
+| `--smtp-password PASS` | | SMTP password for authentication |
 | `--help` | `-h` | Show help message |
 
 </details>
@@ -334,6 +423,24 @@ mcpbr run -c config.yaml --benchmark cybergym --level 2
 
 # Run CyberGym with specific tasks
 mcpbr run -c config.yaml --benchmark cybergym --level 3 -n 5
+
+# Regression detection - compare against baseline
+mcpbr run -c config.yaml --baseline-results baseline.json
+
+# Regression detection with threshold (exit 1 if exceeded)
+mcpbr run -c config.yaml --baseline-results baseline.json --regression-threshold 0.1
+
+# Regression detection with Slack notifications
+mcpbr run -c config.yaml --baseline-results baseline.json --slack-webhook https://hooks.slack.com/...
+
+# Regression detection with Discord notifications
+mcpbr run -c config.yaml --baseline-results baseline.json --discord-webhook https://discord.com/api/webhooks/...
+
+# Regression detection with email notifications
+mcpbr run -c config.yaml --baseline-results baseline.json \
+  --email-to team@example.com --email-from mcpbr@example.com \
+  --smtp-host smtp.gmail.com --smtp-port 587 \
+  --smtp-user user@gmail.com --smtp-password "app-password"
 ```
 
 </details>

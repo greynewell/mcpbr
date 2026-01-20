@@ -13,6 +13,12 @@ from .docker_env import cleanup_orphaned_containers, register_signal_handlers
 from .harness import run_evaluation
 from .harnesses import list_available_harnesses
 from .models import DEFAULT_MODEL, list_supported_models
+from .regression import (
+    detect_regressions,
+    format_regression_report,
+    load_baseline_results,
+    send_notification,
+)
 from .reporting import print_summary, save_json_results, save_markdown_report, save_yaml_results
 
 console = Console()
@@ -200,6 +206,66 @@ def main() -> None:
     default=None,
     help="Path to save YAML results (alternative to --output for YAML format)",
 )
+@click.option(
+    "--baseline-results",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Path to baseline results JSON for regression detection",
+)
+@click.option(
+    "--regression-threshold",
+    type=float,
+    default=0.0,
+    help="Maximum acceptable regression rate (0-1). Exit with code 1 if exceeded.",
+)
+@click.option(
+    "--slack-webhook",
+    type=str,
+    default=None,
+    help="Slack webhook URL for regression notifications",
+)
+@click.option(
+    "--discord-webhook",
+    type=str,
+    default=None,
+    help="Discord webhook URL for regression notifications",
+)
+@click.option(
+    "--email-to",
+    type=str,
+    default=None,
+    help="Email address for regression notifications",
+)
+@click.option(
+    "--email-from",
+    type=str,
+    default=None,
+    help="Sender email address for notifications",
+)
+@click.option(
+    "--smtp-host",
+    type=str,
+    default=None,
+    help="SMTP server hostname for email notifications",
+)
+@click.option(
+    "--smtp-port",
+    type=int,
+    default=587,
+    help="SMTP server port (default: 587)",
+)
+@click.option(
+    "--smtp-user",
+    type=str,
+    default=None,
+    help="SMTP username for authentication",
+)
+@click.option(
+    "--smtp-password",
+    type=str,
+    default=None,
+    help="SMTP password for authentication",
+)
 def run(
     config_path: Path,
     model_override: str | None,
@@ -219,6 +285,16 @@ def run(
     prompt_override: str | None,
     no_prebuilt: bool,
     yaml_output: Path | None,
+    baseline_results: Path | None,
+    regression_threshold: float,
+    slack_webhook: str | None,
+    discord_webhook: str | None,
+    email_to: str | None,
+    email_from: str | None,
+    smtp_host: str | None,
+    smtp_port: int,
+    smtp_user: str | None,
+    smtp_password: str | None,
 ) -> None:
     """Run SWE-bench evaluation with the configured MCP server.
 
@@ -231,6 +307,13 @@ def run(
       mcpbr run -c config.yaml -v        # Verbose output
       mcpbr run -c config.yaml -o out.json -r report.md
       mcpbr run -c config.yaml --yaml out.yaml  # Save as YAML
+
+    \b
+    Regression Detection:
+      mcpbr run -c config.yaml --baseline-results baseline.json
+      mcpbr run -c config.yaml --baseline-results baseline.json --regression-threshold 0.1
+      mcpbr run -c config.yaml --baseline-results baseline.json --slack-webhook https://...
+      mcpbr run -c config.yaml --baseline-results baseline.json --discord-webhook https://...
     """
     register_signal_handlers()
 
@@ -337,6 +420,68 @@ def run(
     if report_path:
         save_markdown_report(results, report_path)
         console.print(f"[green]Report saved to {report_path}[/green]")
+
+    # Regression detection
+    if baseline_results:
+        console.print("\n[bold]Regression Detection[/bold]")
+        try:
+            baseline_data = load_baseline_results(baseline_results)
+
+            # Convert results to dict format for comparison
+            current_data = {
+                "tasks": [
+                    {
+                        "instance_id": task.instance_id,
+                        "mcp": task.mcp,
+                        "baseline": task.baseline,
+                    }
+                    for task in results.tasks
+                ]
+            }
+
+            regression_report = detect_regressions(current_data, baseline_data)
+
+            # Print regression report
+            console.print(format_regression_report(regression_report))
+
+            # Send notifications if configured
+            email_config = None
+            if email_to and email_from and smtp_host:
+                email_config = {
+                    "smtp_host": smtp_host,
+                    "smtp_port": smtp_port,
+                    "from_email": email_from,
+                    "to_email": email_to,
+                    "smtp_user": smtp_user,
+                    "smtp_password": smtp_password,
+                }
+
+            send_notification(
+                regression_report,
+                slack_webhook=slack_webhook,
+                discord_webhook=discord_webhook,
+                email_config=email_config,
+            )
+
+            # Exit with code 1 if regression threshold exceeded
+            if regression_report.exceeds_threshold(regression_threshold):
+                console.print(
+                    f"\n[red]Regression threshold exceeded: "
+                    f"{regression_report.regression_rate:.1%} > {regression_threshold:.1%}[/red]"
+                )
+                sys.exit(1)
+
+        except FileNotFoundError as e:
+            console.print(f"[red]Error: {e}[/red]")
+            sys.exit(1)
+        except ValueError as e:
+            console.print(f"[red]Error: {e}[/red]")
+            sys.exit(1)
+        except Exception as e:
+            console.print(f"[red]Regression detection failed: {e}[/red]")
+            if verbose:
+                console.print_exception()
+            sys.exit(1)
 
 
 @main.command(context_settings={"help_option_names": ["-h", "--help"]})

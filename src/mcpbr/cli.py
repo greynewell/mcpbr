@@ -152,6 +152,14 @@ def main() -> None:
     help="Path to save Markdown report",
 )
 @click.option(
+    "--output-yaml",
+    "-y",
+    "yaml_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Path to save YAML results",
+)
+@click.option(
     "--verbose",
     "-v",
     "verbosity",
@@ -192,14 +200,6 @@ def main() -> None:
     is_flag=True,
     help="Disable pre-built SWE-bench images (build from scratch)",
 )
-@click.option(
-    "--yaml",
-    "-y",
-    "yaml_output",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Path to save YAML results (alternative to --output for YAML format)",
-)
 def run(
     config_path: Path,
     model_override: str | None,
@@ -212,13 +212,13 @@ def run(
     baseline_only: bool,
     output_path: Path | None,
     report_path: Path | None,
+    yaml_path: Path | None,
     verbosity: int,
     log_file_path: Path | None,
     log_dir_path: Path | None,
     task_ids: tuple[str, ...],
     prompt_override: str | None,
     no_prebuilt: bool,
-    yaml_output: Path | None,
 ) -> None:
     """Run SWE-bench evaluation with the configured MCP server.
 
@@ -230,7 +230,7 @@ def run(
       mcpbr run -c config.yaml -n 10     # Sample 10 tasks
       mcpbr run -c config.yaml -v        # Verbose output
       mcpbr run -c config.yaml -o out.json -r report.md
-      mcpbr run -c config.yaml --yaml out.yaml  # Save as YAML
+      mcpbr run -c config.yaml -y out.yaml  # Save as YAML
     """
     register_signal_handlers()
 
@@ -330,9 +330,9 @@ def run(
         save_json_results(results, output_path)
         console.print(f"\n[green]Results saved to {output_path}[/green]")
 
-    if yaml_output:
-        save_yaml_results(results, yaml_output)
-        console.print(f"[green]YAML results saved to {yaml_output}[/green]")
+    if yaml_path:
+        save_yaml_results(results, yaml_path)
+        console.print(f"[green]YAML results saved to {yaml_path}[/green]")
 
     if report_path:
         save_markdown_report(results, report_path)

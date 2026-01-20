@@ -7,7 +7,7 @@ faq:
   - q: "How do I run a specific SWE-bench task?"
     a: "Use the --task or -t flag with the instance_id: 'mcpbr run -c config.yaml -t astropy__astropy-12907'. You can repeat this flag to run multiple specific tasks."
   - q: "How do I save mcpbr results to a file?"
-    a: "Use --output (-o) for JSON results and --report (-r) for a Markdown report: 'mcpbr run -c config.yaml -o results.json -r report.md'."
+    a: "Use --output (-o) for JSON results, --report (-r) for a Markdown report, and --output-csv for CSV export: 'mcpbr run -c config.yaml -o results.json -r report.md --output-csv results.csv'."
 ---
 
 # CLI Reference
@@ -62,6 +62,8 @@ mcpbr run -c CONFIG [OPTIONS]
 | `--no-prebuilt` | | Flag | Disable pre-built SWE-bench images |
 | `--output PATH` | `-o` | Path | Path to save JSON results |
 | `--report PATH` | `-r` | Path | Path to save Markdown report |
+| `--output-csv PATH` | | Path | Path to save CSV results |
+| `--csv-format TEXT` | | Choice | CSV format: `summary` (default) or `detailed` |
 | `--verbose` | `-v` | Count | Verbose output (`-v` summary, `-vv` detailed) |
 | `--log-file PATH` | `-l` | Path | Path to write raw JSON log output (single file) |
 | `--log-dir PATH` | | Path | Directory to write per-instance JSON log files |
@@ -125,8 +127,14 @@ mcpbr run -c config.yaml -o results.json
 # Save Markdown report
 mcpbr run -c config.yaml -r report.md
 
-# Both
-mcpbr run -c config.yaml -o results.json -r report.md
+# Save CSV results (summary format)
+mcpbr run -c config.yaml --output-csv results.csv
+
+# Save CSV results (detailed format with test results and tool usage)
+mcpbr run -c config.yaml --output-csv results.csv --csv-format detailed
+
+# Save all formats
+mcpbr run -c config.yaml -o results.json -r report.md --output-csv results.csv
 
 # Per-instance logs
 mcpbr run -c config.yaml -v --log-dir logs/

@@ -13,7 +13,13 @@ from .docker_env import cleanup_orphaned_containers, register_signal_handlers
 from .harness import run_evaluation
 from .harnesses import list_available_harnesses
 from .models import DEFAULT_MODEL, list_supported_models
-from .reporting import print_summary, save_json_results, save_markdown_report, save_yaml_results
+from .reporting import (
+    print_summary,
+    save_csv_results,
+    save_json_results,
+    save_markdown_report,
+    save_yaml_results,
+)
 
 console = Console()
 
@@ -152,6 +158,19 @@ def main() -> None:
     help="Path to save Markdown report",
 )
 @click.option(
+    "--output-csv",
+    "csv_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Path to save CSV results",
+)
+@click.option(
+    "--csv-format",
+    type=click.Choice(["summary", "detailed"]),
+    default="summary",
+    help="CSV format: 'summary' (default) or 'detailed'",
+)
+@click.option(
     "--verbose",
     "-v",
     "verbosity",
@@ -212,6 +231,8 @@ def run(
     baseline_only: bool,
     output_path: Path | None,
     report_path: Path | None,
+    csv_path: Path | None,
+    csv_format: str,
     verbosity: int,
     log_file_path: Path | None,
     log_dir_path: Path | None,
@@ -231,6 +252,8 @@ def run(
       mcpbr run -c config.yaml -v        # Verbose output
       mcpbr run -c config.yaml -o out.json -r report.md
       mcpbr run -c config.yaml --yaml out.yaml  # Save as YAML
+      mcpbr run -c config.yaml --output-csv results.csv
+      mcpbr run -c config.yaml --output-csv results.csv --csv-format detailed
     """
     register_signal_handlers()
 
@@ -337,6 +360,10 @@ def run(
     if report_path:
         save_markdown_report(results, report_path)
         console.print(f"[green]Report saved to {report_path}[/green]")
+
+    if csv_path:
+        save_csv_results(results, csv_path, format=csv_format)
+        console.print(f"[green]CSV results saved to {csv_path} ({csv_format} format)[/green]")
 
 
 @main.command(context_settings={"help_option_names": ["-h", "--help"]})

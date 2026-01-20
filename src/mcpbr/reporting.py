@@ -1,5 +1,6 @@
 """Reporting utilities for evaluation results."""
 
+import csv
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -240,3 +241,212 @@ def save_yaml_results(results: "EvaluationResults", output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+
+def save_csv_results(
+    results: "EvaluationResults", output_path: Path, format: str = "summary"
+) -> None:
+    """Save evaluation results to a CSV file.
+
+    Args:
+        results: Evaluation results.
+        output_path: Path to save the CSV file.
+        format: CSV format - 'summary' or 'detailed'.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if format == "summary":
+        _save_summary_csv(results, output_path)
+    elif format == "detailed":
+        _save_detailed_csv(results, output_path)
+    else:
+        raise ValueError(f"Invalid CSV format: {format}. Must be 'summary' or 'detailed'.")
+
+
+def _save_summary_csv(results: "EvaluationResults", output_path: Path) -> None:
+    """Save summary CSV with key metrics per task.
+
+    Columns:
+        instance_id, mcp_resolved, baseline_resolved,
+        mcp_tokens_in, mcp_tokens_out, baseline_tokens_in, baseline_tokens_out,
+        mcp_iterations, baseline_iterations, mcp_tool_calls, baseline_tool_calls,
+        mcp_patch_generated, baseline_patch_generated, mcp_error, baseline_error
+    """
+    fieldnames = [
+        "instance_id",
+        "mcp_resolved",
+        "baseline_resolved",
+        "mcp_tokens_in",
+        "mcp_tokens_out",
+        "baseline_tokens_in",
+        "baseline_tokens_out",
+        "mcp_iterations",
+        "baseline_iterations",
+        "mcp_tool_calls",
+        "baseline_tool_calls",
+        "mcp_patch_generated",
+        "baseline_patch_generated",
+        "mcp_error",
+        "baseline_error",
+    ]
+
+    with open(output_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for task in results.tasks:
+            row = {
+                "instance_id": task.instance_id,
+            }
+
+            # MCP columns
+            if task.mcp:
+                row["mcp_resolved"] = task.mcp.get("resolved", False)
+                row["mcp_tokens_in"] = task.mcp.get("tokens", {}).get("input", 0)
+                row["mcp_tokens_out"] = task.mcp.get("tokens", {}).get("output", 0)
+                row["mcp_iterations"] = task.mcp.get("iterations", 0)
+                row["mcp_tool_calls"] = task.mcp.get("tool_calls", 0)
+                row["mcp_patch_generated"] = task.mcp.get("patch_generated", False)
+                row["mcp_error"] = task.mcp.get("error", "")
+            else:
+                row["mcp_resolved"] = ""
+                row["mcp_tokens_in"] = ""
+                row["mcp_tokens_out"] = ""
+                row["mcp_iterations"] = ""
+                row["mcp_tool_calls"] = ""
+                row["mcp_patch_generated"] = ""
+                row["mcp_error"] = ""
+
+            # Baseline columns
+            if task.baseline:
+                row["baseline_resolved"] = task.baseline.get("resolved", False)
+                row["baseline_tokens_in"] = task.baseline.get("tokens", {}).get("input", 0)
+                row["baseline_tokens_out"] = task.baseline.get("tokens", {}).get("output", 0)
+                row["baseline_iterations"] = task.baseline.get("iterations", 0)
+                row["baseline_tool_calls"] = task.baseline.get("tool_calls", 0)
+                row["baseline_patch_generated"] = task.baseline.get("patch_generated", False)
+                row["baseline_error"] = task.baseline.get("error", "")
+            else:
+                row["baseline_resolved"] = ""
+                row["baseline_tokens_in"] = ""
+                row["baseline_tokens_out"] = ""
+                row["baseline_iterations"] = ""
+                row["baseline_tool_calls"] = ""
+                row["baseline_patch_generated"] = ""
+                row["baseline_error"] = ""
+
+            writer.writerow(row)
+
+
+def _save_detailed_csv(results: "EvaluationResults", output_path: Path) -> None:
+    """Save detailed CSV with all available metrics per task.
+
+    Includes all summary columns plus:
+        mcp_patch_applied, baseline_patch_applied,
+        mcp_fail_to_pass_passed, mcp_fail_to_pass_total,
+        baseline_fail_to_pass_passed, baseline_fail_to_pass_total,
+        mcp_pass_to_pass_passed, mcp_pass_to_pass_total,
+        baseline_pass_to_pass_passed, baseline_pass_to_pass_total,
+        mcp_eval_error, baseline_eval_error,
+        mcp_tool_usage, baseline_tool_usage
+    """
+    fieldnames = [
+        "instance_id",
+        "mcp_resolved",
+        "baseline_resolved",
+        "mcp_tokens_in",
+        "mcp_tokens_out",
+        "baseline_tokens_in",
+        "baseline_tokens_out",
+        "mcp_iterations",
+        "baseline_iterations",
+        "mcp_tool_calls",
+        "baseline_tool_calls",
+        "mcp_patch_generated",
+        "baseline_patch_generated",
+        "mcp_patch_applied",
+        "baseline_patch_applied",
+        "mcp_fail_to_pass_passed",
+        "mcp_fail_to_pass_total",
+        "baseline_fail_to_pass_passed",
+        "baseline_fail_to_pass_total",
+        "mcp_pass_to_pass_passed",
+        "mcp_pass_to_pass_total",
+        "baseline_pass_to_pass_passed",
+        "baseline_pass_to_pass_total",
+        "mcp_eval_error",
+        "baseline_eval_error",
+        "mcp_error",
+        "baseline_error",
+        "mcp_tool_usage",
+        "baseline_tool_usage",
+    ]
+
+    with open(output_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for task in results.tasks:
+            row = {
+                "instance_id": task.instance_id,
+            }
+
+            # MCP columns
+            if task.mcp:
+                row["mcp_resolved"] = task.mcp.get("resolved", False)
+                row["mcp_tokens_in"] = task.mcp.get("tokens", {}).get("input", 0)
+                row["mcp_tokens_out"] = task.mcp.get("tokens", {}).get("output", 0)
+                row["mcp_iterations"] = task.mcp.get("iterations", 0)
+                row["mcp_tool_calls"] = task.mcp.get("tool_calls", 0)
+                row["mcp_patch_generated"] = task.mcp.get("patch_generated", False)
+                row["mcp_patch_applied"] = task.mcp.get("patch_applied", False)
+                row["mcp_error"] = task.mcp.get("error", "")
+                row["mcp_eval_error"] = task.mcp.get("eval_error", "")
+
+                # Test results
+                fail_to_pass = task.mcp.get("fail_to_pass", {})
+                row["mcp_fail_to_pass_passed"] = fail_to_pass.get("passed", "")
+                row["mcp_fail_to_pass_total"] = fail_to_pass.get("total", "")
+
+                pass_to_pass = task.mcp.get("pass_to_pass", {})
+                row["mcp_pass_to_pass_passed"] = pass_to_pass.get("passed", "")
+                row["mcp_pass_to_pass_total"] = pass_to_pass.get("total", "")
+
+                # Tool usage (convert dict to JSON string for CSV)
+                tool_usage = task.mcp.get("tool_usage", {})
+                row["mcp_tool_usage"] = json.dumps(tool_usage) if tool_usage else ""
+            else:
+                for key in fieldnames:
+                    if key.startswith("mcp_") and key not in row:
+                        row[key] = ""
+
+            # Baseline columns
+            if task.baseline:
+                row["baseline_resolved"] = task.baseline.get("resolved", False)
+                row["baseline_tokens_in"] = task.baseline.get("tokens", {}).get("input", 0)
+                row["baseline_tokens_out"] = task.baseline.get("tokens", {}).get("output", 0)
+                row["baseline_iterations"] = task.baseline.get("iterations", 0)
+                row["baseline_tool_calls"] = task.baseline.get("tool_calls", 0)
+                row["baseline_patch_generated"] = task.baseline.get("patch_generated", False)
+                row["baseline_patch_applied"] = task.baseline.get("patch_applied", False)
+                row["baseline_error"] = task.baseline.get("error", "")
+                row["baseline_eval_error"] = task.baseline.get("eval_error", "")
+
+                # Test results
+                fail_to_pass = task.baseline.get("fail_to_pass", {})
+                row["baseline_fail_to_pass_passed"] = fail_to_pass.get("passed", "")
+                row["baseline_fail_to_pass_total"] = fail_to_pass.get("total", "")
+
+                pass_to_pass = task.baseline.get("pass_to_pass", {})
+                row["baseline_pass_to_pass_passed"] = pass_to_pass.get("passed", "")
+                row["baseline_pass_to_pass_total"] = pass_to_pass.get("total", "")
+
+                # Tool usage (convert dict to JSON string for CSV)
+                tool_usage = task.baseline.get("tool_usage", {})
+                row["baseline_tool_usage"] = json.dumps(tool_usage) if tool_usage else ""
+            else:
+                for key in fieldnames:
+                    if key.startswith("baseline_") and key not in row:
+                        row[key] = ""
+
+            writer.writerow(row)

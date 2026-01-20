@@ -5,7 +5,7 @@ faq:
   - q: "What does 'resolved' mean in mcpbr results?"
     a: "A task is 'resolved' when the agent's patch passes all FAIL_TO_PASS tests (the tests that should pass after the fix) and all PASS_TO_PASS tests (regression tests that should continue passing)."
   - q: "What output formats does mcpbr support?"
-    a: "mcpbr supports console output with summary tables, JSON output (--output flag) with full structured data, Markdown reports (--report flag), and per-instance JSON logs (--log-dir flag)."
+    a: "mcpbr supports console output with summary tables, JSON output (--output flag) with full structured data, Markdown reports (--report flag), CSV export (--output-csv flag) for data analysis, and per-instance JSON logs (--log-dir flag)."
   - q: "How do I analyze mcpbr results?"
     a: "Use the JSON output for programmatic analysis. Key fields include summary.mcp.rate, summary.baseline.rate, and per-task results with patch_generated, resolved, tokens, iterations, and tool_usage data."
 ---
@@ -208,6 +208,107 @@ The report includes:
 - Summary statistics
 - Per-task results table
 - Analysis of which tasks each agent solved
+
+## CSV Export
+
+Export results as CSV for data analysis in Excel, Google Sheets, or pandas.
+
+### Basic Usage
+
+```bash
+# Summary format (default)
+mcpbr run -c config.yaml --output-csv results.csv
+
+# Detailed format with test results and tool usage
+mcpbr run -c config.yaml --output-csv results.csv --csv-format detailed
+```
+
+### Summary Format
+
+The summary CSV includes key metrics per task:
+
+| Column | Description |
+|--------|-------------|
+| `instance_id` | Task identifier |
+| `mcp_resolved` | Whether MCP agent resolved the task |
+| `baseline_resolved` | Whether baseline agent resolved the task |
+| `mcp_tokens_in` | Input tokens (MCP) |
+| `mcp_tokens_out` | Output tokens (MCP) |
+| `baseline_tokens_in` | Input tokens (baseline) |
+| `baseline_tokens_out` | Output tokens (baseline) |
+| `mcp_iterations` | Number of agent turns (MCP) |
+| `baseline_iterations` | Number of agent turns (baseline) |
+| `mcp_tool_calls` | Total tool invocations (MCP) |
+| `baseline_tool_calls` | Total tool invocations (baseline) |
+| `mcp_patch_generated` | Whether MCP generated a patch |
+| `baseline_patch_generated` | Whether baseline generated a patch |
+| `mcp_error` | Error message if MCP failed |
+| `baseline_error` | Error message if baseline failed |
+
+### Detailed Format
+
+The detailed CSV includes all summary columns plus:
+
+| Column | Description |
+|--------|-------------|
+| `mcp_patch_applied` | Whether MCP patch applied cleanly |
+| `baseline_patch_applied` | Whether baseline patch applied cleanly |
+| `mcp_fail_to_pass_passed` | FAIL_TO_PASS tests passed (MCP) |
+| `mcp_fail_to_pass_total` | FAIL_TO_PASS tests total (MCP) |
+| `baseline_fail_to_pass_passed` | FAIL_TO_PASS tests passed (baseline) |
+| `baseline_fail_to_pass_total` | FAIL_TO_PASS tests total (baseline) |
+| `mcp_pass_to_pass_passed` | PASS_TO_PASS tests passed (MCP) |
+| `mcp_pass_to_pass_total` | PASS_TO_PASS tests total (MCP) |
+| `baseline_pass_to_pass_passed` | PASS_TO_PASS tests passed (baseline) |
+| `baseline_pass_to_pass_total` | PASS_TO_PASS tests total (baseline) |
+| `mcp_eval_error` | Evaluation error (MCP) |
+| `baseline_eval_error` | Evaluation error (baseline) |
+| `mcp_tool_usage` | Tool usage breakdown as JSON (MCP) |
+| `baseline_tool_usage` | Tool usage breakdown as JSON (baseline) |
+
+### Example: Analyzing with pandas
+
+```python
+import pandas as pd
+
+# Load CSV results
+df = pd.read_csv("results.csv")
+
+# Calculate resolution rates
+mcp_rate = df["mcp_resolved"].sum() / len(df)
+baseline_rate = df["baseline_resolved"].sum() / len(df)
+
+print(f"MCP Resolution Rate: {mcp_rate:.1%}")
+print(f"Baseline Resolution Rate: {baseline_rate:.1%}")
+
+# Compare token usage
+print(f"\nAverage tokens (MCP): {df['mcp_tokens_out'].mean():.0f}")
+print(f"Average tokens (Baseline): {df['baseline_tokens_out'].mean():.0f}")
+
+# Find tasks where MCP succeeded but baseline failed
+mcp_wins = df[(df["mcp_resolved"] == True) & (df["baseline_resolved"] == False)]
+print(f"\nTasks where MCP outperformed: {len(mcp_wins)}")
+print(mcp_wins[["instance_id", "mcp_tool_calls", "mcp_iterations"]])
+```
+
+### Example: Excel Analysis
+
+1. Open the CSV in Excel
+2. Use pivot tables to aggregate metrics
+3. Create charts comparing MCP vs baseline
+4. Filter for specific patterns (e.g., high token usage, errors)
+
+### Combining Output Formats
+
+Export all formats for comprehensive analysis:
+
+```bash
+mcpbr run -c config.yaml \
+  -o results.json \
+  -r report.md \
+  --output-csv results.csv \
+  --csv-format detailed
+```
 
 ## Per-Instance Logs
 

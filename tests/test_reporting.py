@@ -1,5 +1,6 @@
 """Tests for reporting utilities."""
 
+import csv
 import json
 import tempfile
 from pathlib import Path
@@ -8,7 +9,12 @@ import pytest
 import yaml
 
 from mcpbr.harness import EvaluationResults, TaskResult
-from mcpbr.reporting import save_json_results, save_markdown_report, save_yaml_results
+from mcpbr.reporting import (
+    save_csv_results,
+    save_json_results,
+    save_markdown_report,
+    save_yaml_results,
+)
 
 
 @pytest.fixture
@@ -21,14 +27,17 @@ def sample_results() -> EvaluationResults:
                 "model": "claude-sonnet-4-5-20250929",
                 "provider": "anthropic",
                 "agent_harness": "claude-code",
+                "benchmark": "swe-bench",
                 "dataset": "SWE-bench/SWE-bench_Lite",
                 "sample_size": 2,
                 "timeout_seconds": 300,
                 "max_iterations": 10,
+                "cybergym_level": None,
             },
             "mcp_server": {
                 "command": "npx",
                 "args": ["-y", "@modelcontextprotocol/server-filesystem", "{workdir}"],
+                "args_note": "{workdir} is replaced with task repository path at runtime",
             },
         },
         summary={
@@ -40,79 +49,53 @@ def sample_results() -> EvaluationResults:
             TaskResult(
                 instance_id="test-task-1",
                 mcp={
-                    "patch_generated": True,
-                    "tokens": {"input": 100, "output": 500},
-                    "iterations": 5,
-                    "tool_calls": 10,
-                    "tool_usage": {"Read": 3, "Write": 2, "Bash": 5},
                     "resolved": True,
                     "patch_applied": True,
+                    "patch_generated": True,
+                    "tokens": {"input": 1000, "output": 500},
+                    "iterations": 3,
+                    "tool_calls": 10,
+                    "tool_usage": {"read_file": 5, "write_file": 3, "bash": 2},
+                    "fail_to_pass": {"passed": 2, "total": 2},
+                    "pass_to_pass": {"passed": 5, "total": 5},
+                    "error": "",
+                    "eval_error": "",
                 },
                 baseline={
-                    "patch_generated": True,
-                    "tokens": {"input": 50, "output": 300},
-                    "iterations": 3,
-                    "tool_calls": 5,
-                    "tool_usage": {"Read": 2, "Write": 1, "Bash": 2},
                     "resolved": False,
-                    "patch_applied": True,
+                    "patch_applied": False,
+                    "patch_generated": True,
+                    "tokens": {"input": 800, "output": 400},
+                    "iterations": 1,
+                    "tool_calls": 0,
+                    "error": "",
+                    "eval_error": "",
                 },
             ),
             TaskResult(
                 instance_id="test-task-2",
                 mcp={
-                    "patch_generated": False,
-                    "tokens": {"input": 80, "output": 400},
-                    "iterations": 4,
-                    "tool_calls": 8,
-                    "tool_usage": {"Read": 4, "Bash": 4},
                     "resolved": False,
                     "patch_applied": False,
+                    "patch_generated": False,
+                    "tokens": {"input": 500, "output": 200},
+                    "iterations": 5,
+                    "tool_calls": 15,
+                    "error": "Timeout",
                 },
                 baseline={
-                    "patch_generated": False,
-                    "tokens": {"input": 40, "output": 200},
-                    "iterations": 2,
-                    "tool_calls": 3,
-                    "tool_usage": {"Read": 1, "Bash": 2},
                     "resolved": False,
                     "patch_applied": False,
+                    "patch_generated": False,
+                    "tokens": {"input": 400, "output": 150},
+                    "iterations": 1,
+                    "tool_calls": 0,
+                    "error": "Parse error",
                 },
             ),
         ],
     )
 
-
-class TestSaveJsonResults:
-    """Tests for save_json_results function."""
-
-    def test_saves_valid_json(self, sample_results: EvaluationResults) -> None:
-        """Test that JSON output is valid and contains expected data."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = Path(tmpdir) / "results.json"
-            save_json_results(sample_results, output_path)
-
-            assert output_path.exists()
-
-            with open(output_path) as f:
-                data = json.load(f)
-
-            assert "metadata" in data
-            assert "summary" in data
-            assert "tasks" in data
-            assert len(data["tasks"]) == 2
-            assert data["tasks"][0]["instance_id"] == "test-task-1"
-            assert data["tasks"][0]["mcp"]["resolved"] is True
-            assert data["tasks"][0]["baseline"]["resolved"] is False
-
-    def test_creates_parent_directories(self, sample_results: EvaluationResults) -> None:
-        """Test that parent directories are created if they don't exist."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = Path(tmpdir) / "subdir" / "nested" / "results.json"
-            save_json_results(sample_results, output_path)
-
-            assert output_path.exists()
-            assert output_path.parent.exists()
 
 
 class TestSaveYamlResults:
@@ -240,35 +223,274 @@ class TestSaveYamlResults:
             assert "baseline" not in data["tasks"][0]
 
 
-class TestSaveMarkdownReport:
-    """Tests for save_markdown_report function."""
 
-    def test_saves_valid_markdown(self, sample_results: EvaluationResults) -> None:
-        """Test that Markdown output is valid and contains expected sections."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = Path(tmpdir) / "report.md"
-            save_markdown_report(sample_results, output_path)
+@pytest.fixture
+def partial_results() -> EvaluationResults:
+    """Create evaluation results with missing MCP or baseline data."""
+    return EvaluationResults(
+        metadata={
+            "timestamp": "2024-01-01T00:00:00Z",
+            "config": {
+                "model": "claude-sonnet-4-5-20250514",
+                "provider": "anthropic",
+                "agent_harness": "claude-code",
+                "benchmark": "swe-bench",
+                "dataset": "SWE-bench/SWE-bench_Lite",
+                "sample_size": 2,
+                "timeout_seconds": 300,
+                "max_iterations": 10,
+                "cybergym_level": None,
+            },
+            "mcp_server": {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-filesystem", "{workdir}"],
+                "args_note": "{workdir} is replaced with task repository path at runtime",
+            },
+        },
+        summary={
+            "mcp": {"resolved": 1, "total": 1, "rate": 1.0},
+            "baseline": {"resolved": 0, "total": 1, "rate": 0.0},
+            "improvement": "+100.0%",
+        },
+        tasks=[
+            TaskResult(
+                instance_id="test-task-mcp-only",
+                mcp={
+                    "resolved": True,
+                    "patch_applied": True,
+                    "patch_generated": True,
+                    "tokens": {"input": 1000, "output": 500},
+                    "iterations": 3,
+                    "tool_calls": 10,
+                },
+                baseline=None,
+            ),
+            TaskResult(
+                instance_id="test-task-baseline-only",
+                mcp=None,
+                baseline={
+                    "resolved": False,
+                    "patch_applied": False,
+                    "patch_generated": False,
+                    "tokens": {"input": 400, "output": 150},
+                    "iterations": 1,
+                    "tool_calls": 0,
+                },
+            ),
+        ],
+    )
 
-            assert output_path.exists()
 
-            content = output_path.read_text()
+class TestCSVExport:
+    """Tests for CSV export functionality."""
 
-            # Check for expected sections
-            assert "# SWE-bench MCP Evaluation Report" in content
-            assert "## Summary" in content
-            assert "## MCP Server Configuration" in content
-            assert "## Per-Task Results" in content
-            assert "## Analysis" in content
+    def test_save_summary_csv(self, sample_results: EvaluationResults, tmp_path: Path) -> None:
+        """Test saving summary CSV format."""
+        csv_path = tmp_path / "results_summary.csv"
+        save_csv_results(sample_results, csv_path, format="summary")
 
-            # Check for task data
-            assert "test-task-1" in content
-            assert "test-task-2" in content
+        assert csv_path.exists()
 
-    def test_creates_parent_directories(self, sample_results: EvaluationResults) -> None:
-        """Test that parent directories are created if they don't exist."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = Path(tmpdir) / "subdir" / "nested" / "report.md"
-            save_markdown_report(sample_results, output_path)
+        with open(csv_path, newline="") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
 
-            assert output_path.exists()
-            assert output_path.parent.exists()
+        assert len(rows) == 2
+
+        # Check first task
+        row1 = rows[0]
+        assert row1["instance_id"] == "test-task-1"
+        assert row1["mcp_resolved"] == "True"
+        assert row1["baseline_resolved"] == "False"
+        assert row1["mcp_tokens_in"] == "1000"
+        assert row1["mcp_tokens_out"] == "500"
+        assert row1["baseline_tokens_in"] == "800"
+        assert row1["baseline_tokens_out"] == "400"
+        assert row1["mcp_iterations"] == "3"
+        assert row1["baseline_iterations"] == "1"
+        assert row1["mcp_tool_calls"] == "10"
+        assert row1["baseline_tool_calls"] == "0"
+        assert row1["mcp_patch_generated"] == "True"
+        assert row1["baseline_patch_generated"] == "True"
+        assert row1["mcp_error"] == ""
+        assert row1["baseline_error"] == ""
+
+        # Check second task
+        row2 = rows[1]
+        assert row2["instance_id"] == "test-task-2"
+        assert row2["mcp_resolved"] == "False"
+        assert row2["baseline_resolved"] == "False"
+        assert row2["mcp_error"] == "Timeout"
+        assert row2["baseline_error"] == "Parse error"
+
+    def test_save_detailed_csv(self, sample_results: EvaluationResults, tmp_path: Path) -> None:
+        """Test saving detailed CSV format."""
+        csv_path = tmp_path / "results_detailed.csv"
+        save_csv_results(sample_results, csv_path, format="detailed")
+
+        assert csv_path.exists()
+
+        with open(csv_path, newline="") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+
+        assert len(rows) == 2
+
+        # Check first task has additional fields
+        row1 = rows[0]
+        assert row1["instance_id"] == "test-task-1"
+        assert row1["mcp_patch_applied"] == "True"
+        assert row1["baseline_patch_applied"] == "False"
+        assert row1["mcp_fail_to_pass_passed"] == "2"
+        assert row1["mcp_fail_to_pass_total"] == "2"
+        assert row1["mcp_pass_to_pass_passed"] == "5"
+        assert row1["mcp_pass_to_pass_total"] == "5"
+        assert row1["mcp_eval_error"] == ""
+        assert row1["baseline_eval_error"] == ""
+
+        # Check tool_usage is JSON string
+        tool_usage = json.loads(row1["mcp_tool_usage"])
+        assert tool_usage["read_file"] == 5
+        assert tool_usage["write_file"] == 3
+        assert tool_usage["bash"] == 2
+
+        # Check second task
+        row2 = rows[1]
+        assert row2["instance_id"] == "test-task-2"
+        assert row2["mcp_fail_to_pass_passed"] == ""
+        assert row2["mcp_tool_usage"] == ""
+
+    def test_save_csv_with_partial_results(
+        self, partial_results: EvaluationResults, tmp_path: Path
+    ) -> None:
+        """Test CSV export with missing MCP or baseline data."""
+        csv_path = tmp_path / "results_partial.csv"
+        save_csv_results(partial_results, csv_path, format="summary")
+
+        assert csv_path.exists()
+
+        with open(csv_path, newline="") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+
+        assert len(rows) == 2
+
+        # Check MCP-only task
+        row1 = rows[0]
+        assert row1["instance_id"] == "test-task-mcp-only"
+        assert row1["mcp_resolved"] == "True"
+        assert row1["baseline_resolved"] == ""
+        assert row1["baseline_tokens_in"] == ""
+
+        # Check baseline-only task
+        row2 = rows[1]
+        assert row2["instance_id"] == "test-task-baseline-only"
+        assert row2["mcp_resolved"] == ""
+        assert row2["baseline_resolved"] == "False"
+        assert row2["mcp_tokens_in"] == ""
+
+    def test_save_csv_creates_parent_dirs(
+        self, sample_results: EvaluationResults, tmp_path: Path
+    ) -> None:
+        """Test that CSV export creates parent directories."""
+        csv_path = tmp_path / "subdir" / "results.csv"
+        save_csv_results(sample_results, csv_path, format="summary")
+
+        assert csv_path.exists()
+        assert csv_path.parent.exists()
+
+    def test_save_csv_invalid_format(
+        self, sample_results: EvaluationResults, tmp_path: Path
+    ) -> None:
+        """Test that invalid format raises ValueError."""
+        csv_path = tmp_path / "results.csv"
+
+        with pytest.raises(ValueError, match="Invalid CSV format"):
+            save_csv_results(sample_results, csv_path, format="invalid")
+
+    def test_csv_summary_headers(self, sample_results: EvaluationResults, tmp_path: Path) -> None:
+        """Test that summary CSV has correct headers."""
+        csv_path = tmp_path / "results.csv"
+        save_csv_results(sample_results, csv_path, format="summary")
+
+        with open(csv_path, newline="") as f:
+            reader = csv.DictReader(f)
+            headers = reader.fieldnames
+
+        expected_headers = [
+            "instance_id",
+            "mcp_resolved",
+            "baseline_resolved",
+            "mcp_tokens_in",
+            "mcp_tokens_out",
+            "baseline_tokens_in",
+            "baseline_tokens_out",
+            "mcp_iterations",
+            "baseline_iterations",
+            "mcp_tool_calls",
+            "baseline_tool_calls",
+            "mcp_patch_generated",
+            "baseline_patch_generated",
+            "mcp_error",
+            "baseline_error",
+        ]
+
+        assert headers == expected_headers
+
+    def test_csv_detailed_headers(self, sample_results: EvaluationResults, tmp_path: Path) -> None:
+        """Test that detailed CSV has correct headers."""
+        csv_path = tmp_path / "results.csv"
+        save_csv_results(sample_results, csv_path, format="detailed")
+
+        with open(csv_path, newline="") as f:
+            reader = csv.DictReader(f)
+            headers = reader.fieldnames
+
+        # Check that detailed has all the extra columns
+        assert "mcp_patch_applied" in headers
+        assert "baseline_patch_applied" in headers
+        assert "mcp_fail_to_pass_passed" in headers
+        assert "mcp_fail_to_pass_total" in headers
+        assert "mcp_tool_usage" in headers
+        assert "baseline_tool_usage" in headers
+
+
+class TestJSONExport:
+    """Tests for JSON export functionality."""
+
+    def test_save_json_results(self, sample_results: EvaluationResults, tmp_path: Path) -> None:
+        """Test saving JSON results."""
+        json_path = tmp_path / "results.json"
+        save_json_results(sample_results, json_path)
+
+        assert json_path.exists()
+
+        with open(json_path) as f:
+            data = json.load(f)
+
+        assert "metadata" in data
+        assert "summary" in data
+        assert "tasks" in data
+        assert len(data["tasks"]) == 2
+        assert data["tasks"][0]["instance_id"] == "test-task-1"
+
+
+class TestMarkdownExport:
+    """Tests for Markdown export functionality."""
+
+    def test_save_markdown_report(
+        self, sample_results: EvaluationResults, tmp_path: Path
+    ) -> None:
+        """Test saving Markdown report."""
+        md_path = tmp_path / "report.md"
+        save_markdown_report(sample_results, md_path)
+
+        assert md_path.exists()
+
+        content = md_path.read_text()
+        assert "# SWE-bench MCP Evaluation Report" in content
+        assert "## Summary" in content
+        assert "## MCP Server Configuration" in content
+        assert "## Per-Task Results" in content
+        assert "test-task-1" in content
+        assert "test-task-2" in content

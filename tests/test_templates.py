@@ -131,9 +131,7 @@ config:
   provider: anthropic
   model: sonnet
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             temp_path = Path(f.name)
@@ -156,9 +154,7 @@ config:
         """Test loading invalid YAML raises error."""
         yaml_content = "not: a: valid: template:"
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
             temp_path = Path(f.name)
@@ -241,9 +237,7 @@ class TestApplyTemplate:
             config={"mcp_server": {"command": "npx", "args": []}},
         )
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             temp_path = Path(f.name)
 
         try:
@@ -396,9 +390,7 @@ class TestBuiltinTemplates:
 
         for template in templates:
             errors = validate_template(template)
-            assert (
-                len(errors) == 0
-            ), f"Template {template.id} has validation errors: {errors}"
+            assert len(errors) == 0, f"Template {template.id} has validation errors: {errors}"
 
     def test_builtin_templates_have_required_fields(self) -> None:
         """Test that all built-in templates have required config fields."""

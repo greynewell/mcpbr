@@ -639,7 +639,9 @@ def config_list() -> None:
     table.add_column("Description")
 
     for template in sorted(templates, key=lambda t: t.id):
-        api_key_indicator = "[yellow]Yes[/yellow]" if template.requires_api_key else "[green]No[/green]"
+        api_key_indicator = (
+            "[yellow]Yes[/yellow]" if template.requires_api_key else "[green]No[/green]"
+        )
         table.add_row(
             template.id,
             template.name,

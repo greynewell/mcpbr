@@ -18,15 +18,11 @@ class MCPTemplate(BaseModel):
     id: str = Field(description="Unique template identifier")
     name: str = Field(description="Human-readable template name")
     description: str = Field(description="Description of what this MCP server does")
-    package: str | None = Field(
-        default=None, description="NPM package or Python package name"
-    )
+    package: str | None = Field(default=None, description="NPM package or Python package name")
     requires_api_key: bool = Field(
         default=False, description="Whether this server requires an API key"
     )
-    env_vars: list[str] = Field(
-        default_factory=list, description="Required environment variables"
-    )
+    env_vars: list[str] = Field(default_factory=list, description="Required environment variables")
     config: dict[str, Any] = Field(description="Template configuration")
 
 
@@ -89,7 +85,9 @@ def load_template_from_yaml(yaml_path: Path) -> MCPTemplate:
     return MCPTemplate(**data)
 
 
-def apply_template(template: MCPTemplate, output_path: Path, overrides: dict[str, Any] | None = None) -> None:
+def apply_template(
+    template: MCPTemplate, output_path: Path, overrides: dict[str, Any] | None = None
+) -> None:
     """Apply a template to create a configuration file.
 
     Args:
@@ -168,9 +166,7 @@ def validate_template(template: MCPTemplate) -> list[str]:
                         # Check if it's referenced with ${VAR} syntax
                         env_str = str(env)
                         if f"${{{var}}}" not in env_str:
-                            errors.append(
-                                f"Declared env var '{var}' not found in config"
-                            )
+                            errors.append(f"Declared env var '{var}' not found in config")
 
     return errors
 

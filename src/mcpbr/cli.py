@@ -14,7 +14,7 @@ from .docker_env import cleanup_orphaned_containers, register_signal_handlers
 from .harness import run_evaluation
 from .harnesses import list_available_harnesses
 from .junit_reporter import save_junit_xml
-from .models import DEFAULT_MODEL, list_supported_models
+from .models import list_supported_models
 from .regression import (
     detect_regressions,
     format_regression_report,

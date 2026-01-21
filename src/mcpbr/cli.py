@@ -328,6 +328,7 @@ def run(
       mcpbr run -c config.yaml -v        # Verbose output
       mcpbr run -c config.yaml -o out.json -r report.md
       mcpbr run -c config.yaml --yaml out.yaml  # Save as YAML
+      mcpbr run -c config.yaml -y out.yaml  # Save as YAML (short form)
 
     \b
     Regression Detection:

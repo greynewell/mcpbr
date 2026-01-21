@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
 from .benchmarks import Benchmark, create_benchmark
+from .cache import ResultCache
 from .config import HarnessConfig
 from .docker_env import DockerEnvironmentManager, TaskEnvironment
 from .evaluation import EvaluationResult
@@ -203,6 +204,7 @@ async def run_single_task(
     verbosity: int = 1,
     log_file: TextIO | None = None,
     log_dir: Path | None = None,
+    cache: ResultCache | None = None,
 ) -> TaskResult:
     """Run evaluation for a single task.
 
@@ -217,6 +219,7 @@ async def run_single_task(
         verbosity: Verbosity level (0=silent, 1=summary, 2=detailed).
         log_file: Optional file handle for writing raw JSON logs.
         log_dir: Optional directory for per-instance JSON log files.
+        cache: Optional result cache.
 
     Returns:
         TaskResult with results for both runs.
@@ -237,6 +240,7 @@ async def run_single_task(
                 verbose,
                 verbosity,
                 mcp_log_writer if mcp_log_writer else log_file,
+                cache,
             )
         finally:
             if mcp_log_writer:
@@ -255,6 +259,7 @@ async def run_single_task(
                 verbose,
                 verbosity,
                 baseline_log_writer if baseline_log_writer else log_file,
+                cache,
             )
         finally:
             if baseline_log_writer:
@@ -271,8 +276,32 @@ async def _run_mcp_evaluation(
     verbose: bool,
     verbosity: int = 1,
     log_file: TextIO | InstanceLogWriter | None = None,
+    cache: ResultCache | None = None,
 ) -> dict[str, Any]:
-    """Run MCP agent evaluation."""
+    """Run MCP agent evaluation with optional caching.
+
+    Args:
+        task: Task dictionary from benchmark.
+        config: Harness configuration.
+        docker_manager: Docker environment manager.
+        benchmark: Benchmark instance.
+        verbose: Enable verbose output.
+        verbosity: Verbosity level.
+        log_file: Optional log file writer.
+        cache: Optional result cache.
+
+    Returns:
+        Dictionary with evaluation results.
+    """
+    # Check cache first if enabled
+    if cache and cache.enabled:
+        prompt = config.agent_prompt if config.agent_prompt else benchmark.get_prompt_template()
+        cached_result = cache.get(task, config, prompt, is_mcp=True)
+        if cached_result is not None:
+            # Add cache hit marker to result
+            cached_result["cache_hit"] = True
+            return cached_result
+
     env: TaskEnvironment | None = None
     try:
         env = await benchmark.create_environment(task, docker_manager)
@@ -301,7 +330,14 @@ async def _run_mcp_evaluation(
         else:
             eval_result = None
 
-        return agent_result_to_dict(agent_result, eval_result, config.model)
+        result = agent_result_to_dict(agent_result, eval_result, config.model)
+
+        # Store in cache if enabled
+        if cache and cache.enabled:
+            prompt = config.agent_prompt if config.agent_prompt else benchmark.get_prompt_template()
+            cache.put(task, config, prompt, is_mcp=True, result=result)
+
+        return result
 
     except asyncio.TimeoutError:
         cost = calculate_cost(config.model, 0, 0)
@@ -338,8 +374,32 @@ async def _run_baseline_evaluation(
     verbose: bool,
     verbosity: int = 1,
     log_file: TextIO | InstanceLogWriter | None = None,
+    cache: ResultCache | None = None,
 ) -> dict[str, Any]:
-    """Run baseline agent evaluation (same harness as MCP, but without MCP server)."""
+    """Run baseline agent evaluation (same harness as MCP, but without MCP server).
+
+    Args:
+        task: Task dictionary from benchmark.
+        config: Harness configuration.
+        docker_manager: Docker environment manager.
+        benchmark: Benchmark instance.
+        verbose: Enable verbose output.
+        verbosity: Verbosity level.
+        log_file: Optional log file writer.
+        cache: Optional result cache.
+
+    Returns:
+        Dictionary with evaluation results.
+    """
+    # Check cache first if enabled
+    if cache and cache.enabled:
+        prompt = config.agent_prompt if config.agent_prompt else benchmark.get_prompt_template()
+        cached_result = cache.get(task, config, prompt, is_mcp=False)
+        if cached_result is not None:
+            # Add cache hit marker to result
+            cached_result["cache_hit"] = True
+            return cached_result
+
     env: TaskEnvironment | None = None
     try:
         env = await benchmark.create_environment(task, docker_manager)
@@ -368,7 +428,14 @@ async def _run_baseline_evaluation(
         else:
             eval_result = None
 
-        return agent_result_to_dict(agent_result, eval_result, config.model)
+        result = agent_result_to_dict(agent_result, eval_result, config.model)
+
+        # Store in cache if enabled
+        if cache and cache.enabled:
+            prompt = config.agent_prompt if config.agent_prompt else benchmark.get_prompt_template()
+            cache.put(task, config, prompt, is_mcp=False, result=result)
+
+        return result
 
     except asyncio.TimeoutError:
         cost = calculate_cost(config.model, 0, 0)
@@ -451,6 +518,12 @@ async def run_evaluation(
     console.print(f"[dim]Evaluating {len(tasks)} tasks[/dim]")
     console.print(f"[dim]Provider: {config.provider}, Harness: {config.agent_harness}[/dim]")
 
+    # Initialize cache if enabled
+    cache: ResultCache | None = None
+    if config.cache_enabled:
+        cache = ResultCache(cache_dir=config.cache_dir, enabled=True)
+        console.print(f"[dim]Cache enabled: {cache.cache_dir}[/dim]")
+
     # Prepare metadata for incremental saves
     metadata_for_save = None
     if incremental_save_path:
@@ -498,6 +571,7 @@ async def run_evaluation(
                 verbosity,
                 log_file,
                 log_dir,
+                cache,
             )
 
             # Update current cost

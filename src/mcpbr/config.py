@@ -128,6 +128,16 @@ class HarnessConfig(BaseModel):
         description="Maximum budget in USD for the evaluation (halts when reached)",
     )
 
+    cache_enabled: bool = Field(
+        default=False,
+        description="Enable result caching to avoid re-running identical evaluations",
+    )
+
+    cache_dir: Path | None = Field(
+        default=None,
+        description="Directory to store cache files (default: ~/.cache/mcpbr)",
+    )
+
     @field_validator("provider")
     @classmethod
     def validate_provider(cls, v: str) -> str:

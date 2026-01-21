@@ -4,6 +4,9 @@ import asyncio
 import sys
 from pathlib import Path
 
+import json
+import csv
+
 import click
 from rich.console import Console
 from rich.table import Table
@@ -1578,6 +1581,57 @@ def smoke_test(config_path: Path | None) -> None:
     # Exit with appropriate code
     sys.exit(0 if success else 1)
 
+@main.command(context_settings={"help_option_names": ["-h", "--help"]})
+@click.argument(
+    "input_path",
+    type=click.Path(exists=True, path_type=Path),
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["csv"]),
+    required=True,
+    help="Export format",
+)
+@click.option(
+    "--output",
+    "-o",
+    "output_path",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Output file path",
+)
+def export(input_path: Path, output_format: str, output_path: Path) -> None:
+    if output_format != "csv":
+        console.print(f"[red]Unsupported format: {output_format}[/red]")
+        sys.exit(1)
+
+    try:
+        data = json.loads(input_path.read_text())
+    except Exception as e:
+        console.print(f"[red]Failed to read JSON: {e}[/red]")
+        sys.exit(1)
+
+    tasks = data.get("tasks", [])
+    if not isinstance(tasks, list):
+        console.print("[red]Expected 'tasks' to be a list[/red]")
+        sys.exit(1)
+
+    rows = [t for t in tasks if isinstance(t, dict)]
+
+    if not rows:
+        console.print("[yellow]No rows to export[/yellow]")
+        return
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with output_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=sorted(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    console.print(f"[green]Exported {len(rows)} rows to {output_path}[/green]")
 
 if __name__ == "__main__":
     main()

@@ -22,23 +22,34 @@ jobs:
       - name: Extract version from release tag
         id: get_version
         run: |
-          # Remove 'v' prefix if present (e.g., v0.3.17 -> 0.3.17)
+          # Remove 'v' prefix if present (e.g., v0.3.18 -> 0.3.18)
           VERSION=${GITHUB_REF#refs/tags/v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Publishing version: $VERSION"
 
-      - name: Update CLI package version
+      - name: Verify versions match release tag
         run: |
-          # Update version in root package.json to match release tag
-          npm version ${{ steps.get_version.outputs.version }} --no-git-tag-version
-          echo "CLI package version updated"
+          # Verify that all package.json files have the correct version
+          EXPECTED_VERSION="${{ steps.get_version.outputs.version }}"
 
-      - name: Update plugin package version
-        run: |
-          # Update version in .claude-plugin/package.json to match release tag
-          cd .claude-plugin
-          npm version ${{ steps.get_version.outputs.version }} --no-git-tag-version
-          echo "Plugin package version updated"
+          CLI_VERSION=$(node -p "require('./package.json').version")
+          PLUGIN_VERSION=$(node -p "require('./.claude-plugin/package.json').version")
+
+          echo "Expected version: $EXPECTED_VERSION"
+          echo "CLI package.json version: $CLI_VERSION"
+          echo "Plugin package.json version: $PLUGIN_VERSION"
+
+          if [ "$CLI_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "Error: CLI package.json version ($CLI_VERSION) does not match release tag ($EXPECTED_VERSION)"
+            exit 1
+          fi
+
+          if [ "$PLUGIN_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "Error: Plugin package.json version ($PLUGIN_VERSION) does not match release tag ($EXPECTED_VERSION)"
+            exit 1
+          fi
+
+          echo "All versions match release tag ✓"
 
       - name: Verify CLI package contents
         run: |

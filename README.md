@@ -1106,3 +1106,8 @@ All contributors are expected to follow our [Community Guidelines](CODE_OF_CONDU
 ## License
 
 MIT - see [LICENSE](LICENSE) for details.
+
+
+---
+
+Built by [Grey Newell](https://greynewell.com)

@@ -167,7 +167,11 @@ function main() {
     process.exit(1);
   });
 
-  mcpbr.on('exit', (code) => {
+  mcpbr.on('exit', (code, signal) => {
+    // If killed by signal, exit with error code
+    if (signal) {
+      process.exit(1);
+    }
     process.exit(code || 0);
   });
 }

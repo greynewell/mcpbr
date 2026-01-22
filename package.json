@@ -29,10 +29,9 @@
     "skills/"
   ],
   "scripts": {
-    "test": "pytest tests/test_claude_plugin.py -v",
-    "test:watch": "pytest tests/test_claude_plugin.py -v --watch"
+    "test": "pytest tests/test_claude_plugin.py -v"
   },
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=18.0.0"
   }
 }

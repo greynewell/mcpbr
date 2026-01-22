@@ -171,3 +171,8 @@ Host Machine
 - [Benchmarks](benchmarks.md) - Available benchmarks and how to use them
 - [Evaluation Results](evaluation-results.md) - Understanding output formats
 - [Troubleshooting](troubleshooting.md) - Common issues and solutions
+
+
+---
+
+Built by [Grey Newell](https://greynewell.com)

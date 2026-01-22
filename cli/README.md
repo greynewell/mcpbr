@@ -91,7 +91,7 @@ npx @greynewell/mcpbr run -c mcpbr.yaml -n 5 -v
 
 ## Documentation
 
-For full documentation, visit: https://greynewell.github.io/mcpbr/
+For full documentation, visit: <https://greynewell.github.io/mcpbr/>
 
 - [Installation Guide](https://greynewell.github.io/mcpbr/installation/)
 - [Configuration Reference](https://greynewell.github.io/mcpbr/configuration/)
@@ -165,6 +165,10 @@ Contributions welcome! See [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.
 
 ## Support
 
-- **Documentation**: https://greynewell.github.io/mcpbr/
-- **Issues**: https://github.com/greynewell/mcpbr/issues
-- **Discussions**: https://github.com/greynewell/mcpbr/discussions
+- **Documentation**: <https://greynewell.github.io/mcpbr/>
+- **Issues**: <https://github.com/greynewell/mcpbr/issues>
+- **Discussions**: <https://github.com/greynewell/mcpbr/discussions>
+
+---
+
+Built by [Grey Newell](https://greynewell.com)

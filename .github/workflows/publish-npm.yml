@@ -13,6 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -65,6 +70,18 @@ jobs:
           test -f .claude-plugin/plugin.json || (echo "Error: plugin.json not found" && exit 1)
           test -d .claude-plugin/skills || (echo "Error: skills directory not found" && exit 1)
           echo "Plugin package contents verified"
+
+      - name: Install Python build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      - name: Build and install mcpbr Python package
+        run: |
+          # Build and install Python package so CLI wrapper tests can run
+          python -m build
+          pip install dist/*.whl
+          echo "Python package installed"
 
       - name: Install CLI package dependencies
         run: |

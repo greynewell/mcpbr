@@ -107,6 +107,9 @@ jobs:
           test -f bin/mcpbr.js || (echo "Error: CLI binary not found" && exit 1)
           echo "CLI package structure verified"
 
+      - name: Install CLI package dependencies
+        run: npm install
+
       - name: Run CLI package scripts
         run: |
           npm test

@@ -40,10 +40,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Infrastructure
 
 - **npm Publishing**: First official npm package releases
-  - `@greynewell/mcpbr` - CLI wrapper for cross-platform installation
-  - `@greynewell/mcpbr-claude-plugin` - Claude Code plugin package
+  - **Scoped packages**:
+    - `@greynewell/mcpbr` - CLI wrapper for cross-platform installation
+    - `@greynewell/mcpbr-claude-plugin` - Claude Code plugin package
+  - **Unscoped packages** (same content, easier names):
+    - `mcpbr` - CLI wrapper for cross-platform installation
+    - `mcpbr-claude-plugin` - Claude Code plugin package
   - Automated publishing workflow on GitHub releases
-  - Publishes both packages with synchronized versions
+  - Cross-publishes to both scoped and unscoped names for maximum discoverability
 
 ## [0.3.17] - 2026-01-22
 

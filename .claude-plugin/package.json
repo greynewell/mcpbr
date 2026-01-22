@@ -27,7 +27,7 @@
   "author": "mcpbr Contributors",
   "files": [
     "plugin.json",
-    "../skills/"
+    "skills/"
   ],
   "scripts": {
     "test": "pytest tests/test_claude_plugin.py -v"

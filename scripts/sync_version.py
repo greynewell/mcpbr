@@ -10,18 +10,30 @@ Usage:
 """
 
 import json
-import re
 import sys
+import tomllib
 from pathlib import Path
+
+
+class VersionNotFoundError(Exception):
+    """Raised when version cannot be found in pyproject.toml."""
+
+    pass
 
 
 def get_version_from_pyproject(pyproject_path: Path) -> str:
     """Extract version from pyproject.toml."""
-    content = pyproject_path.read_text()
-    match = re.search(r'^version\s*=\s*"([^"]+)"', content, re.MULTILINE)
-    if not match:
-        raise ValueError("Could not find version in pyproject.toml")
-    return match.group(1)
+    with open(pyproject_path, "rb") as f:
+        data = tomllib.load(f)
+
+    try:
+        version = data["project"]["version"]
+    except KeyError as e:
+        raise VersionNotFoundError(
+            "Could not find version in pyproject.toml [project] section"
+        ) from e
+
+    return version
 
 
 def update_plugin_json(plugin_json_path: Path, version: str) -> None:
@@ -30,13 +42,13 @@ def update_plugin_json(plugin_json_path: Path, version: str) -> None:
         print(f"Warning: {plugin_json_path} does not exist. Skipping.")
         return
 
-    with open(plugin_json_path) as f:
+    with open(plugin_json_path, encoding="utf-8") as f:
         data = json.load(f)
 
     old_version = data.get("version", "unknown")
     data["version"] = version
 
-    with open(plugin_json_path, "w") as f:
+    with open(plugin_json_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
         f.write("\n")  # Add trailing newline
 

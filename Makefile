@@ -1,4 +1,4 @@
-.PHONY: help install test lint format sync-version clean build
+.PHONY: help install test test-all lint format sync-version clean build
 
 help:
 	@echo "Available commands:"
@@ -20,11 +20,11 @@ test-all:
 	pytest -v
 
 lint:
-	ruff check src/ tests/
-	ruff format --check src/ tests/
+	uv run ruff check src/ tests/
+	uv run ruff format --check src/ tests/
 
 format:
-	ruff format src/ tests/
+	uv run ruff format src/ tests/
 
 sync-version:
 	python3 scripts/sync_version.py

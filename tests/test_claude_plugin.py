@@ -62,9 +62,9 @@ class TestPluginManifest:
         assert match, "Could not find version in pyproject.toml"
         pyproject_version = match.group(1)
 
-        assert (
-            plugin_version == pyproject_version
-        ), f"Plugin version ({plugin_version}) should match pyproject.toml version ({pyproject_version}). Run 'make sync-version' to fix."
+        assert plugin_version == pyproject_version, (
+            f"Plugin version ({plugin_version}) should match pyproject.toml version ({pyproject_version}). Run 'make sync-version' to fix."
+        )
 
     def test_plugin_description(self, plugin_json_path: Path) -> None:
         """Test that plugin has a non-empty description."""
@@ -141,9 +141,7 @@ class TestSkills:
         content = skill_path.read_text().lower()
 
         assert "docker" in content, "mcpbr-eval should mention Docker"
-        assert (
-            "docker ps" in content or "docker" in content
-        ), "mcpbr-eval should mention checking Docker"
+        assert "docker ps" in content, "mcpbr-eval should mention 'docker ps' command"
 
     def test_mcpbr_eval_mentions_workdir(self, skills_dir: Path) -> None:
         """Test that mcpbr-eval skill mentions {workdir} placeholder."""
@@ -159,9 +157,9 @@ class TestSkills:
 
         assert "{workdir}" in content, "mcpbr-config should mention {workdir} placeholder"
         # Should mention it multiple times since it's critical
-        assert (
-            content.count("{workdir}") >= 3
-        ), "mcpbr-config should emphasize {workdir} multiple times"
+        assert content.count("{workdir}") >= 3, (
+            "mcpbr-config should emphasize {workdir} multiple times"
+        )
 
     def test_mcpbr_eval_lists_benchmarks(self, skills_dir: Path) -> None:
         """Test that mcpbr-eval skill lists all supported benchmarks."""
@@ -179,9 +177,9 @@ class TestSkills:
 
         # Should mention the default command structure
         assert "mcpbr run" in content, "benchmark-swe-lite should show mcpbr run command"
-        assert (
-            "SWE-bench" in content or "swe-bench" in content
-        ), "benchmark-swe-lite should mention SWE-bench"
+        assert "SWE-bench" in content or "swe-bench" in content, (
+            "benchmark-swe-lite should mention SWE-bench"
+        )
 
     def test_mcpbr_config_has_templates(self, skills_dir: Path) -> None:
         """Test that mcpbr-config skill has example configurations."""
@@ -229,9 +227,9 @@ class TestVersionSyncScript:
     def test_sync_script_has_shebang(self, sync_script_path: Path) -> None:
         """Test that sync_version.py has proper shebang."""
         content = sync_script_path.read_text()
-        assert content.startswith(
-            "#!/usr/bin/env python3"
-        ), "sync_version.py should have python3 shebang"
+        assert content.startswith("#!/usr/bin/env python3"), (
+            "sync_version.py should have python3 shebang"
+        )
 
     def test_sync_script_has_docstring(self, sync_script_path: Path) -> None:
         """Test that sync_version.py has a docstring."""
@@ -264,10 +262,15 @@ class TestMakefile:
     def test_build_depends_on_sync_version(self, makefile_path: Path) -> None:
         """Test that build target depends on sync-version."""
         content = makefile_path.read_text()
-        # Check if build target includes sync-version dependency
-        assert (
-            "build: sync-version" in content or "build:" in content
-        ), "Makefile should have build target"
+        # Find the build target line and verify it depends on sync-version
+        build_line = None
+        for line in content.splitlines():
+            if line.startswith("build:"):
+                build_line = line
+                break
+
+        assert build_line is not None, "Makefile should have build target"
+        assert "sync-version" in build_line, "Build target should depend on sync-version"
 
 
 class TestPreCommitConfig:
@@ -309,9 +312,9 @@ class TestDocumentation:
     def test_readme_has_claude_code_section(self, readme_path: Path) -> None:
         """Test that README has Claude Code Integration section."""
         content = readme_path.read_text()
-        assert (
-            "## Claude Code Integration" in content
-        ), "README should have Claude Code Integration section"
+        assert "## Claude Code Integration" in content, (
+            "README should have Claude Code Integration section"
+        )
 
     def test_readme_mentions_skills(self, readme_path: Path) -> None:
         """Test that README mentions the available skills."""
@@ -323,16 +326,16 @@ class TestDocumentation:
     def test_contributing_mentions_version_sync(self, contributing_path: Path) -> None:
         """Test that CONTRIBUTING.md mentions version sync."""
         content = contributing_path.read_text()
-        assert (
-            "sync-version" in content or "sync_version" in content
-        ), "CONTRIBUTING.md should mention version sync"
+        assert "sync-version" in content or "sync_version" in content, (
+            "CONTRIBUTING.md should mention version sync"
+        )
 
     def test_contributing_mentions_makefile(self, contributing_path: Path) -> None:
         """Test that CONTRIBUTING.md mentions Makefile."""
         content = contributing_path.read_text()
-        assert (
-            "Makefile" in content or "make " in content
-        ), "CONTRIBUTING.md should mention Makefile"
+        assert "Makefile" in content or "make " in content, (
+            "CONTRIBUTING.md should mention Makefile"
+        )
 
     def test_contributing_mentions_precommit(self, contributing_path: Path) -> None:
         """Test that CONTRIBUTING.md mentions pre-commit hooks."""

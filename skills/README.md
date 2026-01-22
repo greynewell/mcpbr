@@ -72,7 +72,7 @@ When you clone this repository and work with Claude Code:
 
 Each skill is a directory containing a `SKILL.md` file:
 
-```
+```text
 skills/
 ├── mcpbr-eval/
 │   └── SKILL.md          # Instructions for running evaluations
@@ -93,7 +93,7 @@ Each `SKILL.md` contains:
 ## Benefits
 
 ### Without Skills
-```
+```text
 User: "Run the benchmark"
 Claude: *tries `mcpbr run` without config, fails*
 Claude: *forgets to check Docker, fails*
@@ -101,7 +101,7 @@ Claude: *uses wrong flags, fails*
 ```
 
 ### With Skills
-```
+```text
 User: "Run the benchmark"
 Claude: *checks Docker is running*
 Claude: *verifies config exists*

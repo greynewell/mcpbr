@@ -1,8 +1,8 @@
-# @mcpbr/cli
+# @greynewell/mcpbr
 
 > npm wrapper for the mcpbr CLI tool
 
-[![npm version](https://badge.fury.io/js/%40mcpbr%2Fcli.svg)](https://www.npmjs.com/package/@mcpbr/cli)
+[![npm version](https://badge.fury.io/js/%40greynewell%2Fmcpbr.svg)](https://www.npmjs.com/package/@greynewell/mcpbr)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 This npm package provides convenient access to the [mcpbr](https://github.com/greynewell/mcpbr) command-line tool for Node.js and JavaScript developers.
@@ -22,10 +22,10 @@ This npm package provides convenient access to the [mcpbr](https://github.com/gr
 
 ```bash
 # Run directly with npx (no installation)
-npx @mcpbr/cli run -c config.yaml
+npx @greynewell/mcpbr run -c config.yaml
 
 # Or install globally
-npm install -g @mcpbr/cli
+npm install -g @greynewell/mcpbr
 
 # Then use anywhere
 mcpbr run -c config.yaml
@@ -49,22 +49,22 @@ All `mcpbr` commands are available through the npm wrapper:
 
 ```bash
 # Initialize configuration
-npx @mcpbr/cli init
+npx @greynewell/mcpbr init
 
 # Run benchmark evaluation
-npx @mcpbr/cli run -c config.yaml
+npx @greynewell/mcpbr run -c config.yaml
 
 # List available models
-npx @mcpbr/cli models
+npx @greynewell/mcpbr models
 
 # List available benchmarks
-npx @mcpbr/cli benchmarks
+npx @greynewell/mcpbr benchmarks
 
 # Run with verbose output
-npx @mcpbr/cli run -c config.yaml -v
+npx @greynewell/mcpbr run -c config.yaml -v
 
 # Run specific tasks
-npx @mcpbr/cli run -c config.yaml -t astropy__astropy-12907
+npx @greynewell/mcpbr run -c config.yaml -t astropy__astropy-12907
 ```
 
 ## Quick Start
@@ -77,8 +77,8 @@ pip install mcpbr
 export ANTHROPIC_API_KEY="your-api-key"
 
 # 3. Run benchmark
-npx @mcpbr/cli init
-npx @mcpbr/cli run -c mcpbr.yaml -n 5 -v
+npx @greynewell/mcpbr init
+npx @greynewell/mcpbr run -c mcpbr.yaml -n 5 -v
 ```
 
 ## Why use the npm package?
@@ -153,7 +153,7 @@ npm test
 ## Related Packages
 
 - [`mcpbr`](https://pypi.org/project/mcpbr/) - Python package (core implementation)
-- [`@mcpbr/claude-code-plugin`](https://www.npmjs.com/package/@mcpbr/claude-code-plugin) - Claude Code plugin
+- [`@greynewell/claude-code-plugin`](https://www.npmjs.com/package/@greynewell/claude-code-plugin) - Claude Code plugin
 
 ## License
 

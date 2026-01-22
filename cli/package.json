@@ -1,5 +1,5 @@
 {
-  "name": "@mcpbr/cli",
+  "name": "@greynewell/mcpbr",
   "version": "0.3.17",
   "description": "Model Context Protocol Benchmark Runner - CLI tool for evaluating MCP servers",
   "keywords": [

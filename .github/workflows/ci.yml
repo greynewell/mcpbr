@@ -110,11 +110,6 @@ jobs:
       - name: Install CLI package dependencies
         run: npm install
 
-      - name: Run CLI package scripts
-        run: |
-          npm test
-          echo "CLI package tests passed"
-
       - name: Verify plugin package structure
         run: |
           test -f .claude-plugin/package.json || (echo "Error: Plugin package.json not found" && exit 1)

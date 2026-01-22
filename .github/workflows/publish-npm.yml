@@ -1,0 +1,45 @@
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish-npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Extract version from release tag
+        id: get_version
+        run: |
+          # Remove 'v' prefix if present (e.g., v0.3.17 -> 0.3.17)
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Publishing version: $VERSION"
+
+      - name: Update package.json version
+        run: |
+          # Update version in package.json to match release tag
+          npm version ${{ steps.get_version.outputs.version }} --no-git-tag-version
+
+      - name: Verify package contents
+        run: |
+          # Check that required files exist
+          test -f .claude-plugin/plugin.json || (echo "Error: plugin.json not found" && exit 1)
+          test -d skills || (echo "Error: skills directory not found" && exit 1)
+          echo "Package contents verified"
+
+      - name: Publish to npm
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

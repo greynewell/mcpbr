@@ -130,7 +130,7 @@ make build
 
 #### Version Management
 
-The project uses a centralized version in `pyproject.toml` that is automatically synced to other files (like `.claude-plugin/plugin.json`).
+The project uses a centralized version in `pyproject.toml` that is automatically synced to other files (like `.claude-plugin/plugin.json` and `package.json`).
 
 **Automated syncing:**
 - The version sync runs automatically during `make build`
@@ -142,6 +142,24 @@ The project uses a centralized version in `pyproject.toml` that is automatically
 make sync-version
 # or
 python3 scripts/sync_version.py
+```
+
+#### npm Package Commands
+
+The Claude Code plugin is published to npm as `claude-code-plugin-mcpbr`. Use these commands for npm package management:
+
+```bash
+# Prepare npm package (syncs version from pyproject.toml)
+make npm-build
+
+# Test npm package contents locally
+make npm-test
+
+# Create a tarball for local testing
+make npm-pack
+
+# Publish to npm (requires NPM_TOKEN environment variable)
+make npm-publish
 ```
 
 #### Pre-commit Hooks (Optional)
@@ -206,6 +224,71 @@ mcpbr/
 3. Update `VALID_HARNESSES` in `config.py`
 4. Add tests
 5. Update documentation
+
+## Release Process
+
+### Publishing a New Release
+
+When a new GitHub release is published, the following happens automatically:
+
+1. **PyPI Publishing** (`.github/workflows/publish.yml`)
+   - Builds Python package
+   - Publishes to PyPI using trusted publishing
+
+2. **npm Publishing** (`.github/workflows/publish-npm.yml`)
+   - Syncs version from release tag to `package.json`
+   - Verifies package contents
+   - Publishes to npm as `claude-code-plugin-mcpbr`
+
+### Prerequisites for Automated Publishing
+
+**PyPI:**
+- Uses GitHub's trusted publishing (no token needed)
+- Configured in PyPI project settings
+
+**npm:**
+- Requires `NPM_TOKEN` secret in GitHub repository settings
+- Token must have publish permissions for `claude-code-plugin-mcpbr`
+- **Note:** Repository maintainers must add this secret manually
+
+### Creating a Release
+
+1. Update version in `pyproject.toml`
+2. Run `make sync-version` to sync to plugin.json and package.json
+3. Commit and push changes
+4. Create a new GitHub release with tag `vX.Y.Z` (e.g., `v0.3.18`)
+5. Both PyPI and npm packages will be published automatically
+
+### Testing Before Release
+
+**Python package:**
+```bash
+make build
+pip install dist/mcpbr-*.whl  # Test locally
+```
+
+**npm package:**
+```bash
+make npm-pack  # Creates a tarball
+npm install ./claude-code-plugin-mcpbr-*.tgz  # Test locally
+```
+
+### Manual Publishing (if needed)
+
+**PyPI:**
+```bash
+make build
+pip install twine
+twine upload dist/*
+```
+
+**npm:**
+```bash
+export NPM_TOKEN=your-npm-token
+make npm-publish
+# or
+npm publish
+```
 
 ## Questions?
 

@@ -4,6 +4,7 @@ Sync version across all project files.
 
 This script reads the version from pyproject.toml and updates it in:
 - .claude-plugin/plugin.json
+- package.json (if it exists)
 
 Usage:
     python scripts/sync_version.py
@@ -55,11 +56,31 @@ def update_plugin_json(plugin_json_path: Path, version: str) -> None:
     print(f"Updated {plugin_json_path}: {old_version} -> {version}")
 
 
+def update_package_json(package_json_path: Path, version: str) -> None:
+    """Update version in package.json."""
+    if not package_json_path.exists():
+        print(f"Info: {package_json_path} does not exist. Skipping npm package sync.")
+        return
+
+    with open(package_json_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    old_version = data.get("version", "unknown")
+    data["version"] = version
+
+    with open(package_json_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")  # Add trailing newline
+
+    print(f"Updated {package_json_path}: {old_version} -> {version}")
+
+
 def main() -> None:
     """Main entry point."""
     project_root = Path(__file__).parent.parent
     pyproject_path = project_root / "pyproject.toml"
     plugin_json_path = project_root / ".claude-plugin" / "plugin.json"
+    package_json_path = project_root / "package.json"
 
     if not pyproject_path.exists():
         print(f"Error: {pyproject_path} not found", file=sys.stderr)
@@ -71,6 +92,9 @@ def main() -> None:
 
     # Update plugin.json
     update_plugin_json(plugin_json_path, version)
+
+    # Update package.json (if it exists)
+    update_package_json(package_json_path, version)
 
     print("\nVersion sync complete!")
 

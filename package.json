@@ -29,7 +29,8 @@
     "skills/"
   ],
   "scripts": {
-    "test": "echo \"Error: no test command specified\" && exit 0"
+    "test": "pytest tests/test_claude_plugin.py -v",
+    "test:watch": "pytest tests/test_claude_plugin.py -v --watch"
   },
   "engines": {
     "node": ">=14.0.0"

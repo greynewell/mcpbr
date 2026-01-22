@@ -1,0 +1,51 @@
+{
+  "name": "@mcpbr/cli",
+  "version": "0.3.17",
+  "description": "Model Context Protocol Benchmark Runner - CLI tool for evaluating MCP servers",
+  "keywords": [
+    "mcpbr",
+    "mcp",
+    "benchmark",
+    "model-context-protocol",
+    "swe-bench",
+    "cybergym",
+    "llm",
+    "agents",
+    "evaluation",
+    "cli",
+    "testing"
+  ],
+  "homepage": "https://github.com/greynewell/mcpbr",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/greynewell/mcpbr.git",
+    "directory": "cli"
+  },
+  "bugs": {
+    "url": "https://github.com/greynewell/mcpbr/issues"
+  },
+  "license": "MIT",
+  "author": "mcpbr Contributors",
+  "bin": {
+    "mcpbr": "./bin/mcpbr.js"
+  },
+  "files": [
+    "bin/",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node bin/mcpbr.js --version",
+    "prepublishOnly": "npm test"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "dependencies": {
+    "cross-spawn": "^7.0.3"
+  }
+}

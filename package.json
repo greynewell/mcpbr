@@ -1,18 +1,19 @@
 {
-  "name": "@greynewell/mcpbr-claude-plugin",
+  "name": "@greynewell/mcpbr",
   "version": "0.3.17",
-  "description": "Claude Code plugin for mcpbr - Expert benchmark runner for MCP servers with specialized skills",
+  "description": "Model Context Protocol Benchmark Runner - CLI tool for evaluating MCP servers",
   "keywords": [
-    "claude-code",
-    "claude-plugin",
     "mcpbr",
     "mcp",
     "benchmark",
     "model-context-protocol",
     "swe-bench",
+    "cybergym",
     "llm",
     "agents",
-    "evaluation"
+    "evaluation",
+    "cli",
+    "testing"
   ],
   "homepage": "https://github.com/greynewell/mcpbr",
   "repository": {
@@ -24,14 +25,26 @@
   },
   "license": "MIT",
   "author": "mcpbr Contributors",
+  "bin": {
+    "mcpbr": "./bin/mcpbr.js"
+  },
   "files": [
-    ".claude-plugin/",
-    "skills/"
+    "bin/",
+    "README.md"
   ],
   "scripts": {
-    "test": "pytest tests/test_claude_plugin.py -v"
+    "test": "node bin/mcpbr.js --version",
+    "prepublishOnly": "npm test"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "dependencies": {
+    "cross-spawn": "^7.0.3"
   }
 }

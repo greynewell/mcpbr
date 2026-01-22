@@ -72,11 +72,21 @@ venv.bak/
 results/
 *.json
 !config/*.json
+!package.json
+!.claude-plugin/*.json
 config.yaml
 reports/
 .swebench-mcp/
 .logs/
 logs/
+
+# npm
+node_modules/
+*.tgz
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Local secrets for act (GitHub Actions local runner)
 .secrets

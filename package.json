@@ -1,0 +1,37 @@
+{
+  "name": "@mcpbr/claude-code-plugin",
+  "version": "0.3.17",
+  "description": "Claude Code plugin for mcpbr - Expert benchmark runner for MCP servers with specialized skills",
+  "keywords": [
+    "claude-code",
+    "claude-plugin",
+    "mcpbr",
+    "mcp",
+    "benchmark",
+    "model-context-protocol",
+    "swe-bench",
+    "llm",
+    "agents",
+    "evaluation"
+  ],
+  "homepage": "https://github.com/greynewell/mcpbr",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/greynewell/mcpbr.git"
+  },
+  "bugs": {
+    "url": "https://github.com/greynewell/mcpbr/issues"
+  },
+  "license": "MIT",
+  "author": "mcpbr Contributors",
+  "files": [
+    ".claude-plugin/",
+    "skills/"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test command specified\" && exit 0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

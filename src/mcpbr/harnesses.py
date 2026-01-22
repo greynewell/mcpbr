@@ -650,10 +650,12 @@ class ClaudeCodeHarness:
             claude_args_str = " ".join(claude_args)
             claude_cmd = f'claude {claude_args_str} "$(cat {prompt_file})"'
 
+            # Use su without login (-) to preserve working directory context
+            # This ensures claude mcp add registers the server for the correct project
             command = [
                 "/bin/bash",
                 "-c",
-                f"cd {env.workdir} && su - mcpbr -c 'source {env_file} && cd {env.workdir} && {mcp_add_prefix}{claude_cmd}'",
+                f"cd {env.workdir} && su mcpbr -c 'source {env_file} && cd {env.workdir} && {mcp_add_prefix}{claude_cmd}'",
             ]
 
             if verbose:
@@ -701,7 +703,7 @@ class ClaudeCodeHarness:
                 error_msg = stderr or "Unknown error"
                 if mcp_server_name:
                     await env.exec_command(
-                        f"su - mcpbr -c 'source {env_file} && claude mcp remove {mcp_server_name}'",
+                        f"su mcpbr -c 'source {env_file} && claude mcp remove {mcp_server_name}'",
                         timeout=10,
                         environment=docker_env,
                     )
@@ -720,7 +722,7 @@ class ClaudeCodeHarness:
 
             if mcp_server_name:
                 await env.exec_command(
-                    f"su - mcpbr -c 'source {env_file} && claude mcp remove {mcp_server_name}'",
+                    f"su mcpbr -c 'source {env_file} && claude mcp remove {mcp_server_name}'",
                     timeout=10,
                     environment=docker_env,
                 )
@@ -772,7 +774,7 @@ class ClaudeCodeHarness:
             if mcp_server_name:
                 try:
                     await env.exec_command(
-                        f"su - mcpbr -c 'source {env_file} && claude mcp remove {mcp_server_name}'",
+                        f"su mcpbr -c 'source {env_file} && claude mcp remove {mcp_server_name}'",
                         timeout=10,
                         environment=docker_env,
                     )

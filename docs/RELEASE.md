@@ -1,0 +1,317 @@
+# Release Process
+
+This document explains how to create releases for mcpbr, both manually and via automation.
+
+## Table of Contents
+
+- [Automated Release (Recommended)](#automated-release-recommended)
+- [Manual Release](#manual-release)
+- [For AI Agents](#for-ai-agents)
+- [Version Management](#version-management)
+- [What Happens on Release](#what-happens-on-release)
+- [Troubleshooting](#troubleshooting)
+
+## Automated Release (Recommended)
+
+### Using GitHub Actions UI
+
+1. **Navigate to Actions**
+   - Go to the [Actions tab](../../actions) in GitHub
+   - Select "Create Release" workflow from the left sidebar
+
+2. **Trigger the workflow**
+   - Click "Run workflow" button
+   - Select the version bump type:
+     - `patch` - Bug fixes (0.3.24 → 0.3.25)
+     - `minor` - New features (0.3.24 → 0.4.0)
+     - `major` - Breaking changes (0.3.24 → 1.0.0)
+   - Optionally add additional release notes
+   - Click "Run workflow"
+
+3. **Wait for completion**
+   - The workflow will:
+     - Calculate the new version
+     - Update `pyproject.toml`
+     - Sync version to all package files
+     - Commit and push the changes
+     - Create a git tag
+     - Create a GitHub release
+     - Trigger PyPI and npm publication
+
+### Using GitHub CLI
+
+```bash
+# Patch release (bug fixes)
+gh workflow run release.yml -f version_bump=patch
+
+# Minor release (new features)
+gh workflow run release.yml -f version_bump=minor
+
+# Major release (breaking changes)
+gh workflow run release.yml -f version_bump=major
+
+# With additional notes
+gh workflow run release.yml \
+  -f version_bump=patch \
+  -f release_notes="Special thanks to all contributors!"
+```
+
+## Manual Release
+
+If you need to create a release manually:
+
+### 1. Update the version
+
+Edit `pyproject.toml`:
+```toml
+version = "0.3.25"  # Update this line
+```
+
+### 2. Sync versions across all files
+
+```bash
+python3 scripts/sync_version.py
+```
+
+This will update:
+- `package.json`
+- `.claude-plugin/plugin.json`
+- `.claude-plugin/package.json`
+- `.claude-plugin/marketplace.json`
+
+### 3. Commit and tag
+
+```bash
+# Commit the version bump
+git add pyproject.toml package.json .claude-plugin/
+git commit -m "chore: bump version to 0.3.25"
+git push origin main
+
+# Create and push tag
+git tag -a v0.3.25 -m "Release v0.3.25"
+git push origin v0.3.25
+```
+
+### 4. Create GitHub release
+
+```bash
+# Using gh CLI
+gh release create v0.3.25 \
+  --title "v0.3.25" \
+  --notes "Release notes here" \
+  --latest
+
+# Or use the GitHub UI at:
+# https://github.com/greynewell/mcpbr/releases/new
+```
+
+## For AI Agents
+
+**AI agents should use the automated workflow whenever possible.** Here's the recommended workflow:
+
+### Quick Release Workflow
+
+```bash
+# 1. Trigger the release workflow (choose patch/minor/major)
+gh workflow run release.yml -f version_bump=patch
+
+# 2. Wait for the workflow to complete (~2 minutes)
+sleep 120
+
+# 3. Verify the release was created
+gh release view --json tagName,publishedAt,assets
+
+# 4. Confirm publication to PyPI and npm
+# PyPI: https://pypi.org/project/mcpbr/
+# npm: https://www.npmjs.com/package/@greynewell/mcpbr
+```
+
+### Determining Version Bump Type
+
+Choose the bump type based on the changes:
+
+- **patch**: Bug fixes, documentation updates, dependency updates
+  - Example: Fix Docker TypeError (#290)
+  - Example: Update README with new examples
+
+- **minor**: New features, enhancements (backward compatible)
+  - Example: Add new benchmark support
+  - Example: Add CSV export functionality
+
+- **major**: Breaking changes, API changes
+  - Example: Redesign CLI interface
+  - Example: Remove deprecated features
+
+### Checking Current Version
+
+```bash
+# From pyproject.toml
+grep '^version' pyproject.toml
+
+# From git tags
+git describe --tags --abbrev=0
+
+# From latest release
+gh release view --json tagName -q '.tagName'
+```
+
+## Version Management
+
+### Version Sync Script
+
+The `scripts/sync_version.py` script ensures all package files have the same version:
+
+- **Source of truth**: `pyproject.toml`
+- **Synced files**:
+  - `package.json` (npm CLI package)
+  - `.claude-plugin/plugin.json`
+  - `.claude-plugin/package.json` (Claude plugin)
+  - `.claude-plugin/marketplace.json`
+
+### Pre-commit Hook
+
+The version sync runs automatically on commit via `.pre-commit-config.yaml`:
+
+```yaml
+- id: sync-version
+  name: Sync version across project files
+  entry: python3 scripts/sync_version.py
+  language: system
+  pass_filenames: false
+  files: pyproject.toml
+  stages: [pre-commit]
+```
+
+## What Happens on Release
+
+When a release is published (tag pushed or GitHub release created):
+
+### 1. PyPI Publication (`publish.yml`)
+- Builds Python package
+- Publishes to https://pypi.org/project/mcpbr/
+
+### 2. npm Publication (`publish-npm.yml`)
+Publishes **4 packages**:
+- `@greynewell/mcpbr` - Scoped CLI package
+- `mcpbr-cli` - Unscoped CLI package
+- `@greynewell/mcpbr-claude-plugin` - Scoped Claude plugin
+- `mcpbr-claude-plugin` - Unscoped Claude plugin
+
+### 3. Release Drafter
+- Automatically generates release notes based on merged PRs
+- Groups changes by type (features, fixes, docs, etc.)
+- Credits contributors
+
+## Troubleshooting
+
+### Version Mismatch Error
+
+If you see "version does not match release tag" during npm publish:
+
+```bash
+# Sync versions
+python3 scripts/sync_version.py
+
+# Verify all versions match
+grep '"version"' package.json .claude-plugin/package.json
+grep '^version' pyproject.toml
+```
+
+### Failed PyPI Upload
+
+If PyPI upload fails:
+1. Check if the version already exists on PyPI
+2. Bump to the next version
+3. Delete the failed release and tag
+4. Retry with new version
+
+```bash
+# Delete failed release
+gh release delete v0.3.25 --yes
+
+# Delete tag locally and remotely
+git tag -d v0.3.25
+git push origin :refs/tags/v0.3.25
+
+# Bump version and retry
+```
+
+### Failed npm Upload
+
+If npm upload fails:
+1. Check npm token is valid
+2. Verify package names are available
+3. Check package.json structure
+
+```bash
+# Test npm package locally
+cd /tmp
+npm pack /path/to/mcpbr
+tar -tzf greynewell-mcpbr-*.tgz
+```
+
+### Release Draft Not Found
+
+The automated workflow looks for a draft release created by Release Drafter. If none exists:
+- The workflow will create a release with basic notes
+- You can add custom notes via the `release_notes` input
+
+### Git Push Permission Denied
+
+If the workflow fails to push:
+- Ensure `GITHUB_TOKEN` has `contents: write` permission
+- Check branch protection rules allow the bot to push
+
+## Best Practices
+
+1. **Always use semantic versioning**: MAJOR.MINOR.PATCH
+2. **Use automated workflow** to avoid manual errors
+3. **Test releases** on TestPyPI/npm dry-run first (if critical)
+4. **Update CHANGELOG.md** if maintained separately
+5. **Verify publications** after release completes
+6. **Never delete published releases** unless absolutely necessary
+
+## Examples
+
+### Example 1: Bug Fix Release
+
+```bash
+# PR #290 fixed a Docker TypeError - this is a patch
+gh workflow run release.yml -f version_bump=patch
+# Result: 0.3.24 → 0.3.25
+```
+
+### Example 2: New Feature Release
+
+```bash
+# Added SWE-Bench Lite support - this is a minor feature
+gh workflow run release.yml -f version_bump=minor
+# Result: 0.3.24 → 0.4.0
+```
+
+### Example 3: Breaking Change Release
+
+```bash
+# Redesigned CLI interface - breaking change
+gh workflow run release.yml \
+  -f version_bump=major \
+  -f release_notes="⚠️ Breaking: CLI commands have been reorganized. See migration guide."
+# Result: 0.3.24 → 1.0.0
+```
+
+## Quick Reference
+
+| Task | Command |
+|------|---------|
+| Check current version | `grep '^version' pyproject.toml` |
+| Sync versions | `python3 scripts/sync_version.py` |
+| Patch release | `gh workflow run release.yml -f version_bump=patch` |
+| Minor release | `gh workflow run release.yml -f version_bump=minor` |
+| Major release | `gh workflow run release.yml -f version_bump=major` |
+| View latest release | `gh release view` |
+| List all releases | `gh release list` |
+| Delete release | `gh release delete v0.3.25 --yes` |
+
+---
+
+**For questions or issues, please open an issue on GitHub.**

@@ -38,17 +38,13 @@ class TestMCPLogging:
 
     def test_mcp_log_directory_creation(self, harness: ClaudeCodeHarness) -> None:
         """Test that MCP log directory is created correctly."""
-        expected_dir = Path.home() / ".mcpbr_state" / "logs"
-
         # The directory should be created when needed
         # We'll verify this in the integration test
         assert harness.mcp_server is not None
         assert harness.mcp_server.name == "test-server"
 
     @pytest.mark.asyncio
-    async def test_mcp_registration_failure_cleanup(
-        self, harness: ClaudeCodeHarness
-    ) -> None:
+    async def test_mcp_registration_failure_cleanup(self, harness: ClaudeCodeHarness) -> None:
         """Test that temp files are cleaned up on MCP registration failure."""
         mock_env = MagicMock()
         mock_env.workdir = "/workspace"
@@ -92,16 +88,12 @@ class TestMCPLogging:
 
         # Verify cleanup was called
         cleanup_calls = [
-            call
-            for call in mock_env.exec_command.call_args_list
-            if "rm -f" in str(call)
+            call for call in mock_env.exec_command.call_args_list if "rm -f" in str(call)
         ]
         assert len(cleanup_calls) >= 1, "Temp files should be cleaned up"
 
     @pytest.mark.asyncio
-    async def test_mcp_stdout_captured_in_error(
-        self, harness: ClaudeCodeHarness
-    ) -> None:
+    async def test_mcp_stdout_captured_in_error(self, harness: ClaudeCodeHarness) -> None:
         """Test that MCP stdout is included in error messages."""
         mock_env = MagicMock()
         mock_env.workdir = "/workspace"
@@ -180,9 +172,7 @@ class TestMCPLogging:
 
         # Verify cleanup was called
         cleanup_calls = [
-            call
-            for call in mock_env.exec_command.call_args_list
-            if "rm -f" in str(call)
+            call for call in mock_env.exec_command.call_args_list if "rm -f" in str(call)
         ]
         assert len(cleanup_calls) >= 1, "Temp files should be cleaned up on timeout"
 

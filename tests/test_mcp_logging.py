@@ -71,7 +71,10 @@ class TestMCPLogging:
             "created_at": "2024-01-01",
         }
 
-        with patch("mcpbr.harnesses.Path") as mock_path:
+        with (
+            patch("mcpbr.harnesses.Path") as mock_path,
+            patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}),
+        ):
             mock_path.home.return_value = Path(tempfile.gettempdir())
             result = await harness._solve_in_docker(
                 task=task,
@@ -116,7 +119,10 @@ class TestMCPLogging:
             "created_at": "2024-01-01",
         }
 
-        with patch("mcpbr.harnesses.Path") as mock_path:
+        with (
+            patch("mcpbr.harnesses.Path") as mock_path,
+            patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}),
+        ):
             mock_path.home.return_value = Path(tempfile.gettempdir())
             result = await harness._solve_in_docker(
                 task=task,
@@ -155,7 +161,10 @@ class TestMCPLogging:
             "created_at": "2024-01-01",
         }
 
-        with patch("mcpbr.harnesses.Path") as mock_path:
+        with (
+            patch("mcpbr.harnesses.Path") as mock_path,
+            patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}),
+        ):
             mock_path.home.return_value = Path(tempfile.gettempdir())
             result = await harness._solve_in_docker(
                 task=task,

@@ -224,7 +224,9 @@ class TestMCPLogging:
         assert mcp_config.env["TEST_VAR"] == "test_value"
 
     @pytest.mark.asyncio
-    async def test_mcp_logs_captured_without_keywords(self, harness: ClaudeCodeHarness) -> None:
+    async def test_mcp_logs_captured_without_keywords(
+        self, harness: ClaudeCodeHarness, tmp_path: Path
+    ) -> None:
         """Test that MCP server stdout is captured even without 'mcp' or 'supermodel' keywords.
 
         Regression test for bug where stdout was filtered by keywords, causing most
@@ -279,16 +281,16 @@ Debug: Cache miss for /workspace/"""
             "created_at": "2024-01-01",
         }
 
-        # Log file location (using actual .mcpbr_state directory)
-        log_dir = Path.home() / ".mcpbr_state" / "logs"
+        # Use pytest tmp_path for isolated test environment
+        log_dir = tmp_path / ".mcpbr_state" / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         expected_log_file = log_dir / "test_id_mcp.log"
 
-        # Clean up any existing log file from previous test runs
-        if expected_log_file.exists():
-            expected_log_file.unlink()
-
-        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+        # Patch Path.home() to use tmp_path for test isolation
+        with (
+            patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}),
+            patch("pathlib.Path.home", return_value=tmp_path),
+        ):
             _ = await harness._solve_in_docker(
                 task=task,
                 env=mock_env,
@@ -297,34 +299,36 @@ Debug: Cache miss for /workspace/"""
                 task_id="test_id",
             )
 
-            # Verify the log file was created
-            assert expected_log_file.exists(), "MCP log file should be created"
+            try:
+                # Verify the log file was created
+                assert expected_log_file.exists(), "MCP log file should be created"
 
-            # Read the actual log file content
-            log_content = expected_log_file.read_text()
+                # Read the actual log file content
+                log_content = expected_log_file.read_text()
 
-            # Check that stdout lines without "mcp" or "supermodel" were captured
-            # These lines would NOT be captured with the old keyword-filtering code
-            assert "[STDOUT] Server initialized on stdio" in log_content, (
-                "Stdout without keywords should be captured"
-            )
-            assert "[STDOUT] Returning 10 tools" in log_content, (
-                "Generic server output should be captured"
-            )
-            assert "[STDOUT] File read: /workspace/test.py" in log_content, (
-                "Filesystem operations should be captured"
-            )
-            assert "[STDOUT] Request completed in 12ms" in log_content, (
-                "Performance logs should be captured"
-            )
+                # Check that stdout lines without "mcp" or "supermodel" were captured
+                # These lines would NOT be captured with the old keyword-filtering code
+                assert "[STDOUT] Server initialized on stdio" in log_content, (
+                    "Stdout without keywords should be captured"
+                )
+                assert "[STDOUT] Returning 10 tools" in log_content, (
+                    "Generic server output should be captured"
+                )
+                assert "[STDOUT] File read: /workspace/test.py" in log_content, (
+                    "Filesystem operations should be captured"
+                )
+                assert "[STDOUT] Request completed in 12ms" in log_content, (
+                    "Performance logs should be captured"
+                )
 
-            # Check that stderr was also captured
-            assert "[STDERR] Warning: Large file detected" in log_content, (
-                "Stderr should be captured"
-            )
-            assert "[STDERR] Debug: Cache miss for /workspace/" in log_content, (
-                "Stderr debug output should be captured"
-            )
-
-            # Clean up the test log file
-            expected_log_file.unlink()
+                # Check that stderr was also captured
+                assert "[STDERR] Warning: Large file detected" in log_content, (
+                    "Stderr should be captured"
+                )
+                assert "[STDERR] Debug: Cache miss for /workspace/" in log_content, (
+                    "Stderr debug output should be captured"
+                )
+            finally:
+                # Clean up the test log file even if assertions fail
+                if expected_log_file.exists():
+                    expected_log_file.unlink()

@@ -1239,26 +1239,32 @@ def state(state_dir: Path | None, clear: bool) -> None:
             console.print("[bold]  By tool:[/bold]")
 
             # Sort by failure rate (descending)
+            # Note: tool_usage contains total calls (successful + failed)
+            # tool_failures contains only failed calls
+            # So succeeded = total - failed, not total + failed
             tool_stats = []
             for tool_name in set(list(tool_usage.keys()) + list(tool_failures.keys())):
-                success_count = tool_usage.get(tool_name, 0)
+                total = tool_usage.get(tool_name, 0)  # Total calls (not success count!)
                 failure_count = tool_failures.get(tool_name, 0)
-                total = success_count + failure_count
+                # Derive success count (avoid negative values in edge cases)
+                success_count = max(total - failure_count, 0)
                 rate = failure_count / total if total > 0 else 0.0
                 tool_stats.append((tool_name, total, success_count, failure_count, rate))
 
             tool_stats.sort(key=lambda x: x[4], reverse=True)  # Sort by failure rate
 
-            for tool_name, total, success, failed, rate in tool_stats[:10]:
-                if failed > 0:
-                    style = "bold red" if rate > 0.5 else "yellow" if rate > 0.1 else "dim"
-                    console.print(
-                        f"    {tool_name}: {total:,} calls, {failed:,} failed ({rate:.1%})",
-                        style=style,
-                    )
+            # Only show tools with failures, limit to top 10
+            failing_tools = [t for t in tool_stats if t[3] > 0]
+            for tool_name, total, _success, failed, rate in failing_tools[:10]:
+                style = "bold red" if rate > 0.5 else "yellow" if rate > 0.1 else "dim"
+                console.print(
+                    f"    {tool_name}: {total:,} calls, {failed:,} failed ({rate:.1%})",
+                    style=style,
+                )
 
-            if len([t for t in tool_stats if t[3] > 0]) > 10:
-                console.print(f"    ... and {len(tool_stats) - 10} more tools")
+            if len(failing_tools) > 10:
+                remaining = len(failing_tools) - 10
+                console.print(f"    ... and {remaining} more tools with failures")
 
 
 @config.command(context_settings={"help_option_names": ["-h", "--help"]})

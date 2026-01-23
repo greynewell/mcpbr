@@ -137,13 +137,17 @@ class TestToolFailureTracking:
 
         stats = _calculate_mcp_tool_stats(results)
 
-        # Total calls = successful + failed
-        # Read: 5+3 successful + 2 failed = 10 total calls
-        # Write: 3 successful + 0 failed = 3 total calls
-        # Bash: 2 successful + 1 failed = 3 total calls
-        # Grand total: 13 successful calls, 3 failures
+        # Note: tool_usage values represent TOTAL calls (successful + failed)
+        # tool_failures represents only failed calls
+        # succeeded = total - failed
+        #
+        # Aggregated from results:
+        # Read: tool_usage = 5+3 = 8 total, tool_failures = 2 → succeeded = 8-2 = 6
+        # Write: tool_usage = 3 total, tool_failures = 0 → succeeded = 3-0 = 3
+        # Bash: tool_usage = 2 total, tool_failures = 1 → succeeded = 2-1 = 1
+        # Grand total: 8+3+2 = 13 total calls, 3 failures
         # Failure rate = 3 / 13 = 23%, which is > 10%
-        assert stats["total_tool_calls"] == 13  # Successful calls only
+        assert stats["total_tool_calls"] == 13  # Total calls from tool_usage
         assert stats["total_failures"] == 3
         assert stats["failure_rate"] == pytest.approx(3 / 13, rel=0.01)
         assert stats["has_failures"] is True
@@ -151,13 +155,13 @@ class TestToolFailureTracking:
 
         # Check per-tool stats
         assert "Read" in stats["by_tool"]
-        assert stats["by_tool"]["Read"]["total"] == 10
-        assert stats["by_tool"]["Read"]["succeeded"] == 8
+        assert stats["by_tool"]["Read"]["total"] == 8  # tool_usage value, not 10
+        assert stats["by_tool"]["Read"]["succeeded"] == 6  # 8 - 2 = 6, not 8
         assert stats["by_tool"]["Read"]["failed"] == 2
 
         assert "Bash" in stats["by_tool"]
-        assert stats["by_tool"]["Bash"]["total"] == 3
-        assert stats["by_tool"]["Bash"]["succeeded"] == 2
+        assert stats["by_tool"]["Bash"]["total"] == 2  # tool_usage value, not 3
+        assert stats["by_tool"]["Bash"]["succeeded"] == 1  # 2 - 1 = 1, not 2
         assert stats["by_tool"]["Bash"]["failed"] == 1
 
     def test_calculate_mcp_tool_stats_high_failure_rate(self) -> None:

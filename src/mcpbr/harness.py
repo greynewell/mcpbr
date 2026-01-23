@@ -512,15 +512,21 @@ def _calculate_mcp_tool_stats(results: list[TaskResult]) -> dict[str, Any]:
     failure_rate = total_failures / total_calls if total_calls > 0 else 0.0
 
     # Build per-tool breakdown
+    # Note: tool_usage contains total calls (successful + failed)
+    # tool_failures contains only failed calls
+    # So succeeded = total - failed, not total + failed
     by_tool = {}
     for tool_name in set(list(tool_usage.keys()) + list(tool_failures.keys())):
-        success_count = tool_usage.get(tool_name, 0)
+        total_calls_for_tool = tool_usage.get(tool_name, 0)
         failure_count = tool_failures.get(tool_name, 0)
-        total_tool_calls = success_count + failure_count
-        tool_failure_rate = failure_count / total_tool_calls if total_tool_calls > 0 else 0.0
+        # Derive success count (avoid negative values in edge cases)
+        success_count = max(total_calls_for_tool - failure_count, 0)
+        tool_failure_rate = (
+            failure_count / total_calls_for_tool if total_calls_for_tool > 0 else 0.0
+        )
 
         by_tool[tool_name] = {
-            "total": total_tool_calls,
+            "total": total_calls_for_tool,
             "succeeded": success_count,
             "failed": failure_count,
             "failure_rate": tool_failure_rate,

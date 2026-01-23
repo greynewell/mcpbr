@@ -199,6 +199,80 @@ def print_summary(results: "EvaluationResults", console: Console) -> None:
             if len(unused_tools) > 10:
                 console.print(f"  ... and {len(unused_tools) - 10} more")
 
+    # Print MCP tool call failure statistics
+    mcp_tool_stats = results.summary.get("mcp_tool_stats")
+    if mcp_tool_stats and mcp_tool_stats.get("total_tool_calls", 0) > 0:
+        console.print()
+        console.print("[bold]MCP Tool Call Statistics[/bold]")
+        console.print()
+
+        total_calls = mcp_tool_stats.get("total_tool_calls", 0)
+        total_failures = mcp_tool_stats.get("total_failures", 0)
+        failure_rate = mcp_tool_stats.get("failure_rate", 0.0)
+
+        stats_table = Table(title="Tool Call Reliability")
+        stats_table.add_column("Metric", style="cyan")
+        stats_table.add_column("Value", style="green")
+
+        stats_table.add_row("Total Calls", f"{total_calls:,}")
+        stats_table.add_row("Failed Calls", f"{total_failures:,}")
+        stats_table.add_row("Failure Rate", f"{failure_rate:.1%}")
+
+        console.print(stats_table)
+
+        if mcp_tool_stats.get("high_failure_rate"):
+            console.print()
+            console.print(
+                f"[bold yellow]⚠️  Warning: High failure rate detected ({failure_rate:.1%})[/bold yellow]"
+            )
+            console.print(
+                "[dim]This may indicate MCP server issues or infrastructure problems.[/dim]"
+            )
+
+        # Show per-tool breakdown if there are failures
+        if total_failures > 0:
+            by_tool = mcp_tool_stats.get("by_tool", {})
+            if by_tool:
+                console.print()
+                console.print("[bold]Per-Tool Breakdown:[/bold]")
+                console.print()
+
+                tool_table = Table()
+                tool_table.add_column("Tool", style="cyan")
+                tool_table.add_column("Total", justify="right")
+                tool_table.add_column("Failed", justify="right")
+                tool_table.add_column("Failure Rate", justify="right")
+
+                # Sort by failure rate (descending)
+                sorted_tools = sorted(
+                    by_tool.items(),
+                    key=lambda x: x[1].get("failure_rate", 0.0),
+                    reverse=True,
+                )
+
+                for tool_name, stats in sorted_tools[:10]:
+                    if stats.get("failed", 0) > 0:  # Only show tools with failures
+                        total = stats.get("total", 0)
+                        failed = stats.get("failed", 0)
+                        rate = stats.get("failure_rate", 0.0)
+
+                        # Color code by severity
+                        rate_style = "bold red" if rate > 0.5 else "yellow" if rate > 0.1 else ""
+
+                        tool_table.add_row(
+                            tool_name,
+                            f"{total:,}",
+                            f"{failed:,}",
+                            f"{rate:.1%}",
+                            style=rate_style,
+                        )
+
+                console.print(tool_table)
+
+                if len([t for t in sorted_tools if t[1].get("failed", 0) > 0]) > 10:
+                    remaining = len(sorted_tools) - 10
+                    console.print(f"[dim]... and {remaining} more tools with failures[/dim]")
+
     # Print cost analysis
     console.print()
     console.print("[bold]Cost Analysis[/bold]")
@@ -464,6 +538,72 @@ def save_markdown_report(results: "EvaluationResults", output_path: Path) -> Non
             for tool_name in unused_tools:
                 lines.append(f"- {tool_name}")
             lines.append("")
+
+    # Add MCP tool failure statistics
+    mcp_tool_stats = results.summary.get("mcp_tool_stats")
+    if mcp_tool_stats and mcp_tool_stats.get("total_tool_calls", 0) > 0:
+        lines.append("## MCP Tool Call Statistics")
+        lines.append("")
+
+        total_calls = mcp_tool_stats.get("total_tool_calls", 0)
+        total_failures = mcp_tool_stats.get("total_failures", 0)
+        failure_rate = mcp_tool_stats.get("failure_rate", 0.0)
+
+        lines.append("| Metric | Value |")
+        lines.append("|--------|-------|")
+        lines.append(f"| Total Tool Calls | {total_calls:,} |")
+        lines.append(f"| Failed Calls | {total_failures:,} |")
+        lines.append(f"| Failure Rate | {failure_rate:.1%} |")
+        lines.append("")
+
+        if mcp_tool_stats.get("high_failure_rate"):
+            lines.append(
+                f"**⚠️ Warning:** High failure rate detected ({failure_rate:.1%}). "
+                "This may indicate MCP server issues or infrastructure problems."
+            )
+            lines.append("")
+
+        # Per-tool breakdown
+        by_tool = mcp_tool_stats.get("by_tool", {})
+        if by_tool:
+            lines.append("### Per-Tool Breakdown")
+            lines.append("")
+            lines.append("| Tool | Total Calls | Succeeded | Failed | Failure Rate |")
+            lines.append("|------|-------------|-----------|--------|--------------|")
+
+            # Sort by failure rate (descending)
+            sorted_tools = sorted(
+                by_tool.items(),
+                key=lambda x: x[1].get("failure_rate", 0.0),
+                reverse=True,
+            )
+
+            for tool_name, stats in sorted_tools:
+                if stats.get("failed", 0) > 0:  # Only show tools with failures
+                    total = stats.get("total", 0)
+                    succeeded = stats.get("succeeded", 0)
+                    failed = stats.get("failed", 0)
+                    rate = stats.get("failure_rate", 0.0)
+                    lines.append(
+                        f"| {tool_name} | {total:,} | {succeeded:,} | {failed:,} | {rate:.1%} |"
+                    )
+
+            lines.append("")
+
+            # Show sample errors for top failing tools
+            has_errors = False
+            for tool_name, stats in sorted_tools[:3]:  # Top 3 failing tools
+                if "sample_errors" in stats:
+                    if not has_errors:
+                        lines.append("### Sample Errors")
+                        lines.append("")
+                        has_errors = True
+
+                    lines.append(f"**{tool_name}:**")
+                    lines.append("")
+                    for error in stats["sample_errors"][:2]:  # First 2 errors per tool
+                        lines.append(f"- {error}")
+                    lines.append("")
 
     lines.append("## MCP Server Configuration")
     lines.append("")

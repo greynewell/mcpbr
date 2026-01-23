@@ -30,6 +30,8 @@ class AgentResult:
     iterations: int = 0
     tool_calls: int = 0
     tool_usage: dict[str, int] = field(default_factory=dict)
+    tool_failures: dict[str, int] = field(default_factory=dict)
+    tool_errors: dict[str, list[str]] = field(default_factory=dict)
     messages: list[dict[str, Any]] = field(default_factory=list)
     stdout: str = ""
     stderr: str = ""
@@ -305,16 +307,29 @@ async def _write_prompt_file(workdir: str, problem_statement: str) -> str:
 
 def _parse_tool_usage_from_stream(
     stdout: str,
-) -> tuple[int, dict[str, int], int, int, int, str | None]:
+) -> tuple[
+    int,
+    dict[str, int],
+    dict[str, int],
+    dict[str, list[str]],
+    int,
+    int,
+    int,
+    str | None,
+]:
     """Parse tool usage and metadata from stream-json output.
 
     Args:
         stdout: Raw stdout from Claude Code CLI in stream-json format.
 
     Returns:
-        Tuple of (total_tool_calls, tool_usage_dict, num_turns, tokens_in, tokens_out, result_subtype).
+        Tuple of (total_tool_calls, tool_usage_dict, tool_failures_dict,
+                  tool_errors_dict, num_turns, tokens_in, tokens_out, result_subtype).
     """
     tool_usage: dict[str, int] = {}
+    tool_failures: dict[str, int] = {}
+    tool_errors: dict[str, list[str]] = {}
+    tool_use_id_to_name: dict[str, str] = {}
     total_tool_calls = 0
     num_turns = 0
     tokens_in = 0
@@ -337,12 +352,49 @@ def _parse_tool_usage_from_stream(
                     for block in content:
                         if isinstance(block, dict) and block.get("type") == "tool_use":
                             tool_name = block.get("name", "unknown")
+                            tool_id = block.get("id", "")
                             tool_usage[tool_name] = tool_usage.get(tool_name, 0) + 1
                             total_tool_calls += 1
+                            # Track tool_use_id -> tool_name for failure tracking
+                            if tool_id:
+                                tool_use_id_to_name[tool_id] = tool_name
 
                 usage = message.get("usage", {})
                 tokens_in += usage.get("input_tokens", 0)
                 tokens_out += usage.get("output_tokens", 0)
+
+            if event.get("type") == "user":
+                message = event.get("message", {})
+                content = message.get("content", [])
+                if isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "tool_result":
+                            is_error = block.get("is_error", False)
+                            if is_error:
+                                tool_use_id = block.get("tool_use_id", "")
+                                tool_name = tool_use_id_to_name.get(tool_use_id, "unknown")
+                                # Increment failure count
+                                tool_failures[tool_name] = tool_failures.get(tool_name, 0) + 1
+                                # Capture error message
+                                error_content = block.get("content", "")
+                                if isinstance(error_content, str):
+                                    error_msg = error_content[:200]  # Truncate long errors
+                                elif isinstance(error_content, list):
+                                    # Extract text from content blocks
+                                    texts = [
+                                        item.get("text", "")
+                                        for item in error_content
+                                        if isinstance(item, dict) and "text" in item
+                                    ]
+                                    error_msg = " ".join(texts)[:200]
+                                else:
+                                    error_msg = str(error_content)[:200]
+
+                                if tool_name not in tool_errors:
+                                    tool_errors[tool_name] = []
+                                # Only keep first few errors per tool to avoid memory bloat
+                                if len(tool_errors[tool_name]) < 5:
+                                    tool_errors[tool_name].append(error_msg)
 
             if event.get("type") == "result":
                 has_result = True
@@ -359,7 +411,16 @@ def _parse_tool_usage_from_stream(
         tokens_in = result_tokens_in
         tokens_out = result_tokens_out
 
-    return total_tool_calls, tool_usage, num_turns, tokens_in, tokens_out, result_subtype
+    return (
+        total_tool_calls,
+        tool_usage,
+        tool_failures,
+        tool_errors,
+        num_turns,
+        tokens_in,
+        tokens_out,
+        result_subtype,
+    )
 
 
 DEFAULT_PROMPT = (
@@ -517,9 +578,16 @@ class ClaudeCodeHarness:
                     timeout,
                 )
 
-            total_tool_calls, tool_usage, num_turns, tokens_in, tokens_out, result_subtype = (
-                _parse_tool_usage_from_stream(stdout)
-            )
+            (
+                total_tool_calls,
+                tool_usage,
+                tool_failures,
+                tool_errors,
+                num_turns,
+                tokens_in,
+                tokens_out,
+                result_subtype,
+            ) = _parse_tool_usage_from_stream(stdout)
 
             if result_subtype == "error_max_turns" and num_turns > self.max_iterations:
                 num_turns = self.max_iterations
@@ -543,6 +611,8 @@ class ClaudeCodeHarness:
                     iterations=num_turns,
                     tool_calls=total_tool_calls,
                     tool_usage=tool_usage,
+                    tool_failures=tool_failures,
+                    tool_errors=tool_errors,
                 )
 
             if mcp_server_name:
@@ -565,6 +635,8 @@ class ClaudeCodeHarness:
                 tokens_output=tokens_out,
                 tool_calls=total_tool_calls,
                 tool_usage=tool_usage,
+                tool_failures=tool_failures,
+                tool_errors=tool_errors,
             )
         except Exception:
             if mcp_server_name:
@@ -812,9 +884,16 @@ class ClaudeCodeHarness:
                             mcp_log_file.write(f"[STDERR] {line}\n")
                     mcp_log_file.flush()
 
-            total_tool_calls, tool_usage, num_turns, tokens_in, tokens_out, result_subtype = (
-                _parse_tool_usage_from_stream(stdout)
-            )
+            (
+                total_tool_calls,
+                tool_usage,
+                tool_failures,
+                tool_errors,
+                num_turns,
+                tokens_in,
+                tokens_out,
+                result_subtype,
+            ) = _parse_tool_usage_from_stream(stdout)
 
             if result_subtype == "error_max_turns" and num_turns > self.max_iterations:
                 num_turns = self.max_iterations
@@ -859,6 +938,8 @@ class ClaudeCodeHarness:
                     iterations=num_turns,
                     tool_calls=total_tool_calls,
                     tool_usage=tool_usage,
+                    tool_failures=tool_failures,
+                    tool_errors=tool_errors,
                 )
 
             if mcp_server_name:
@@ -914,6 +995,8 @@ class ClaudeCodeHarness:
                 tokens_output=tokens_out,
                 tool_calls=total_tool_calls,
                 tool_usage=tool_usage,
+                tool_failures=tool_failures,
+                tool_errors=tool_errors,
             )
         except asyncio.TimeoutError:
             # Task execution timed out

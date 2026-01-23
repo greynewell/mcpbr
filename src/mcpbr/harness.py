@@ -100,6 +100,12 @@ def agent_result_to_dict(
     if result.tool_usage:
         data["tool_usage"] = result.tool_usage
 
+    if result.tool_failures:
+        data["tool_failures"] = result.tool_failures
+
+    if result.tool_errors:
+        data["tool_errors"] = result.tool_errors
+
     if result.error:
         data["error"] = result.error
 
@@ -464,6 +470,76 @@ async def _run_baseline_evaluation(
             await env.cleanup()
 
 
+def _calculate_mcp_tool_stats(results: list[TaskResult]) -> dict[str, Any]:
+    """Calculate MCP tool call failure statistics across all tasks.
+
+    Args:
+        results: List of task results.
+
+    Returns:
+        Dictionary with MCP tool statistics including total calls, failures, and per-tool breakdown.
+    """
+    total_calls = 0
+    total_failures = 0
+    tool_usage: dict[str, int] = {}
+    tool_failures: dict[str, int] = {}
+    tool_errors: dict[str, list[str]] = {}
+
+    for r in results:
+        if r.mcp:
+            # Aggregate successful tool calls
+            if "tool_usage" in r.mcp:
+                for tool_name, count in r.mcp["tool_usage"].items():
+                    tool_usage[tool_name] = tool_usage.get(tool_name, 0) + count
+                    total_calls += count
+
+            # Aggregate failed tool calls
+            if "tool_failures" in r.mcp:
+                for tool_name, count in r.mcp["tool_failures"].items():
+                    tool_failures[tool_name] = tool_failures.get(tool_name, 0) + count
+                    total_failures += count
+
+            # Collect error messages (sample only, not all)
+            if "tool_errors" in r.mcp:
+                for tool_name, errors in r.mcp["tool_errors"].items():
+                    if tool_name not in tool_errors:
+                        tool_errors[tool_name] = []
+                    # Keep only first few unique errors per tool
+                    for error in errors:
+                        if error not in tool_errors[tool_name] and len(tool_errors[tool_name]) < 3:
+                            tool_errors[tool_name].append(error)
+
+    failure_rate = total_failures / total_calls if total_calls > 0 else 0.0
+
+    # Build per-tool breakdown
+    by_tool = {}
+    for tool_name in set(list(tool_usage.keys()) + list(tool_failures.keys())):
+        success_count = tool_usage.get(tool_name, 0)
+        failure_count = tool_failures.get(tool_name, 0)
+        total_tool_calls = success_count + failure_count
+        tool_failure_rate = failure_count / total_tool_calls if total_tool_calls > 0 else 0.0
+
+        by_tool[tool_name] = {
+            "total": total_tool_calls,
+            "succeeded": success_count,
+            "failed": failure_count,
+            "failure_rate": tool_failure_rate,
+        }
+
+        # Add sample errors if available
+        if tool_name in tool_errors and tool_errors[tool_name]:
+            by_tool[tool_name]["sample_errors"] = tool_errors[tool_name]
+
+    return {
+        "total_tool_calls": total_calls,
+        "total_failures": total_failures,
+        "failure_rate": failure_rate,
+        "by_tool": by_tool,
+        "has_failures": total_failures > 0,
+        "high_failure_rate": failure_rate > 0.1,  # Flag if >10% failure rate
+    }
+
+
 async def run_evaluation(
     config: HarnessConfig,
     run_mcp: bool = True,
@@ -782,6 +858,9 @@ async def run_evaluation(
     )
     tool_coverage = calculate_tool_coverage(temp_results)
 
+    # Calculate MCP tool failure statistics
+    mcp_tool_stats = _calculate_mcp_tool_stats(results)
+
     # Build metadata with incremental evaluation stats
     metadata = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -846,6 +925,7 @@ async def run_evaluation(
                 ],
             },
             "tool_coverage": tool_coverage,
+            "mcp_tool_stats": mcp_tool_stats,
         },
         tasks=results,
     )

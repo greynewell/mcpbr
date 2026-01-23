@@ -1200,6 +1200,65 @@ def state(state_dir: Path | None, clear: bool) -> None:
         console.print(
             f"  Baseline: {baseline_resolved}/{completed} ({baseline_resolved / completed:.1%})"
         )
+        console.print()
+
+    # Show MCP tool call statistics
+    total_tool_calls = 0
+    total_failures = 0
+    tool_usage: dict[str, int] = {}
+    tool_failures: dict[str, int] = {}
+
+    for task_state in tracker.state.tasks.values():
+        if task_state.completed and task_state.mcp_result:
+            # Aggregate successful tool calls
+            if "tool_usage" in task_state.mcp_result:
+                for tool_name, count in task_state.mcp_result["tool_usage"].items():
+                    tool_usage[tool_name] = tool_usage.get(tool_name, 0) + count
+                    total_tool_calls += count
+
+            # Aggregate failed tool calls
+            if "tool_failures" in task_state.mcp_result:
+                for tool_name, count in task_state.mcp_result["tool_failures"].items():
+                    tool_failures[tool_name] = tool_failures.get(tool_name, 0) + count
+                    total_failures += count
+
+    if total_tool_calls > 0:
+        failure_rate = total_failures / total_tool_calls
+        console.print("[bold]MCP Tool Statistics:[/bold]")
+        console.print(f"  Total calls: {total_tool_calls:,}")
+        console.print(f"  Failures: {total_failures:,} ({failure_rate:.1%})")
+
+        if failure_rate > 0.1:
+            console.print(
+                f"  [bold yellow]⚠️  High failure rate detected ({failure_rate:.1%})[/bold yellow]"
+            )
+
+        # Show per-tool breakdown if there are failures
+        if total_failures > 0:
+            console.print()
+            console.print("[bold]  By tool:[/bold]")
+
+            # Sort by failure rate (descending)
+            tool_stats = []
+            for tool_name in set(list(tool_usage.keys()) + list(tool_failures.keys())):
+                success_count = tool_usage.get(tool_name, 0)
+                failure_count = tool_failures.get(tool_name, 0)
+                total = success_count + failure_count
+                rate = failure_count / total if total > 0 else 0.0
+                tool_stats.append((tool_name, total, success_count, failure_count, rate))
+
+            tool_stats.sort(key=lambda x: x[4], reverse=True)  # Sort by failure rate
+
+            for tool_name, total, success, failed, rate in tool_stats[:10]:
+                if failed > 0:
+                    style = "bold red" if rate > 0.5 else "yellow" if rate > 0.1 else "dim"
+                    console.print(
+                        f"    {tool_name}: {total:,} calls, {failed:,} failed ({rate:.1%})",
+                        style=style,
+                    )
+
+            if len([t for t in tool_stats if t[3] > 0]) > 10:
+                console.print(f"    ... and {len(tool_stats) - 10} more tools")
 
 
 @config.command(context_settings={"help_option_names": ["-h", "--help"]})

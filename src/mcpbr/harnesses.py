@@ -662,10 +662,10 @@ class ClaudeCodeHarness:
                     )
 
                 if verbose:
-                    self._console.print(f"[green]✓ MCP server registered successfully[/green]")
+                    self._console.print("[green]✓ MCP server registered successfully[/green]")
 
             except asyncio.TimeoutError:
-                error_msg = f"MCP server registration timed out after 60s. The MCP server may have failed to start or is hanging during initialization."
+                error_msg = "MCP server registration timed out after 60s. The MCP server may have failed to start or is hanging during initialization."
                 if verbose:
                     self._console.print(f"[red]✗ {error_msg}[/red]")
                 return AgentResult(

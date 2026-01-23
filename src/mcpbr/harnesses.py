@@ -776,8 +776,8 @@ class ClaudeCodeHarness:
 
                 def on_stdout(line: str) -> None:
                     formatter.format_line(line, instance_id)
-                    # Capture MCP-related output
-                    if mcp_log_file and ("mcp" in line.lower() or "supermodel" in line.lower()):
+                    # Capture all stdout to MCP log
+                    if mcp_log_file:
                         mcp_log_file.write(f"[STDOUT] {line}\n")
                         mcp_log_file.flush()
 
@@ -806,8 +806,7 @@ class ClaudeCodeHarness:
                 # Write stdout/stderr to MCP log even in non-verbose mode
                 if mcp_log_file:
                     for line in stdout.splitlines():
-                        if "mcp" in line.lower() or "supermodel" in line.lower():
-                            mcp_log_file.write(f"[STDOUT] {line}\n")
+                        mcp_log_file.write(f"[STDOUT] {line}\n")
                     if stderr:
                         for line in stderr.splitlines():
                             mcp_log_file.write(f"[STDERR] {line}\n")

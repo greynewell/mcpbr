@@ -302,11 +302,11 @@ tail -f ~/.mcpbr_state/logs/*.log
 ```
 
 **Error messages now include log paths**:
-```
+```text
 Error: Task execution timed out after 1200s.
        MCP server 'supermodel' was registered successfully
        but the agent failed to complete within the timeout.
-       MCP server logs saved to: ~/.mcpbr_state/logs/django-11905_mcp.log
+       MCP server logs saved to: ~/.mcpbr_state/logs/django__django-11905_mcp.log
 ```
 
 ### MCP Tool Timeouts
@@ -360,12 +360,12 @@ mcp_server:
 
 **Example errors**:
 
-```
+```text
 MCP server registration failed (exit 1):
   npx: command not found
 ```
 
-```
+```text
 MCP server registration timed out after 60s.
   The MCP server may have failed to start or is hanging.
 ```

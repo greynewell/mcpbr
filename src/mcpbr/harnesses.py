@@ -616,18 +616,27 @@ class ClaudeCodeHarness:
         await env.exec_command(f"chown mcpbr:mcpbr {prompt_file}", timeout=5)
 
         env_file = "/tmp/.mcpbr_env.sh"
-        env_exports = f"export ANTHROPIC_API_KEY='{api_key}'\nexport HOME='/home/mcpbr'\n"
+        # Use shlex.quote() to safely escape all environment variable values
+        env_exports = (
+            f"export ANTHROPIC_API_KEY={shlex.quote(api_key)}\nexport HOME='/home/mcpbr'\n"
+        )
 
         # Add MCP server env vars and timeout configuration
         if self.mcp_server:
             # Add MCP timeout configuration for Claude CLI
             # See: https://code.claude.com/docs/en/settings.md
-            env_exports += f"export MCP_TIMEOUT='{self.mcp_server.startup_timeout_ms}'\n"
-            env_exports += f"export MCP_TOOL_TIMEOUT='{self.mcp_server.tool_timeout_ms}'\n"
+            env_exports += (
+                f"export MCP_TIMEOUT={shlex.quote(str(self.mcp_server.startup_timeout_ms))}\n"
+            )
+            env_exports += (
+                f"export MCP_TOOL_TIMEOUT={shlex.quote(str(self.mcp_server.tool_timeout_ms))}\n"
+            )
 
             # Add user-defined MCP server env vars
             for key, value in self.mcp_server.get_expanded_env().items():
-                env_exports += f"export {key}='{value}'\n"
+                # Sanitize key (must be valid shell identifier) and quote value
+                safe_key = key.replace("-", "_").replace(".", "_")
+                env_exports += f"export {safe_key}={shlex.quote(value)}\n"
 
         await env.exec_command(
             f"cat > {env_file} << 'MCPBR_ENV_EOF'\n{env_exports}MCPBR_ENV_EOF",
@@ -722,13 +731,20 @@ class ClaudeCodeHarness:
                 claude_args.extend(["--model", self.model])
 
             claude_args_str = " ".join(claude_args)
-            claude_cmd = f'claude {claude_args_str} "$(cat {prompt_file})"'
 
             # Run Claude Code (MCP server already registered above)
+            # Use shlex.quote() to prevent shell injection
+            quoted_workdir = shlex.quote(env.workdir)
+            quoted_env_file = shlex.quote(env_file)
+            quoted_prompt_file = shlex.quote(prompt_file)
+
+            # Build inner command first, then quote for su -c
+            inner_cmd = f'source {quoted_env_file} && cd {quoted_workdir} && claude {claude_args_str} "$(cat {quoted_prompt_file})"'
+
             command = [
                 "/bin/bash",
                 "-c",
-                f"cd {env.workdir} && su mcpbr -c 'source {env_file} && cd {env.workdir} && {claude_cmd}'",
+                f"cd {quoted_workdir} && su mcpbr -c {shlex.quote(inner_cmd)}",
             ]
 
             # Set up MCP server log file if MCP is enabled
@@ -740,7 +756,9 @@ class ClaudeCodeHarness:
                 # Create logs directory in .mcpbr_state
                 state_dir = Path.home() / ".mcpbr_state" / "logs"
                 state_dir.mkdir(parents=True, exist_ok=True)
-                mcp_log_path = state_dir / f"{instance_id}_mcp.log"
+                # Sanitize instance_id to prevent path traversal
+                safe_instance_id = instance_id.replace("/", "_").replace("\\", "_")
+                mcp_log_path = state_dir / f"{safe_instance_id}_mcp.log"
                 mcp_log_file = open(mcp_log_path, "w")
 
             if verbose:
@@ -785,6 +803,16 @@ class ClaudeCodeHarness:
                     environment=docker_env,
                 )
 
+                # Write stdout/stderr to MCP log even in non-verbose mode
+                if mcp_log_file:
+                    for line in stdout.splitlines():
+                        if "mcp" in line.lower() or "supermodel" in line.lower():
+                            mcp_log_file.write(f"[STDOUT] {line}\n")
+                    if stderr:
+                        for line in stderr.splitlines():
+                            mcp_log_file.write(f"[STDERR] {line}\n")
+                    mcp_log_file.flush()
+
             total_tool_calls, tool_usage, num_turns, tokens_in, tokens_out, result_subtype = (
                 _parse_tool_usage_from_stream(stdout)
             )
@@ -809,8 +837,14 @@ class ClaudeCodeHarness:
                             error_msg += f"\nMCP server logs saved to: {mcp_log_path}"
 
                 if mcp_server_name:
+                    # Use shlex.quote() for MCP removal command
+                    quoted_env_file = shlex.quote(env_file)
+                    quoted_server_name = shlex.quote(mcp_server_name)
+                    remove_cmd = (
+                        f"source {quoted_env_file} && claude mcp remove {quoted_server_name}"
+                    )
                     await env.exec_command(
-                        f"su mcpbr -c 'source {env_file} && claude mcp remove {mcp_server_name}'",
+                        f"su mcpbr -c {shlex.quote(remove_cmd)}",
                         timeout=10,
                         environment=docker_env,
                     )
@@ -829,8 +863,12 @@ class ClaudeCodeHarness:
                 )
 
             if mcp_server_name:
+                # Use shlex.quote() for MCP removal command
+                quoted_env_file = shlex.quote(env_file)
+                quoted_server_name = shlex.quote(mcp_server_name)
+                remove_cmd = f"source {quoted_env_file} && claude mcp remove {quoted_server_name}"
                 await env.exec_command(
-                    f"su mcpbr -c 'source {env_file} && claude mcp remove {mcp_server_name}'",
+                    f"su mcpbr -c {shlex.quote(remove_cmd)}",
                     timeout=10,
                     environment=docker_env,
                 )
@@ -882,13 +920,20 @@ class ClaudeCodeHarness:
             # Task execution timed out
             if mcp_server_name:
                 try:
+                    # Use shlex.quote() for MCP removal command
+                    quoted_env_file = shlex.quote(env_file)
+                    quoted_server_name = shlex.quote(mcp_server_name)
+                    remove_cmd = (
+                        f"source {quoted_env_file} && claude mcp remove {quoted_server_name}"
+                    )
                     await env.exec_command(
-                        f"su mcpbr -c 'source {env_file} && claude mcp remove {mcp_server_name}'",
+                        f"su mcpbr -c {shlex.quote(remove_cmd)}",
                         timeout=10,
                         environment=docker_env,
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    if verbose:
+                        self._console.print(f"[dim red]Failed to remove MCP server: {e}[/dim red]")
 
             error_msg = f"Task execution timed out after {timeout}s."
             if self.mcp_server:
@@ -906,13 +951,20 @@ class ClaudeCodeHarness:
         except Exception:
             if mcp_server_name:
                 try:
+                    # Use shlex.quote() for MCP removal command
+                    quoted_env_file = shlex.quote(env_file)
+                    quoted_server_name = shlex.quote(mcp_server_name)
+                    remove_cmd = (
+                        f"source {quoted_env_file} && claude mcp remove {quoted_server_name}"
+                    )
                     await env.exec_command(
-                        f"su mcpbr -c 'source {env_file} && claude mcp remove {mcp_server_name}'",
+                        f"su mcpbr -c {shlex.quote(remove_cmd)}",
                         timeout=10,
                         environment=docker_env,
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    if verbose:
+                        self._console.print(f"[dim red]Failed to remove MCP server: {e}[/dim red]")
             raise
         finally:
             # Close MCP log file if it was opened

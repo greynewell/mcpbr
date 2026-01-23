@@ -11,6 +11,7 @@ from mcpbr.config import MCPServerConfig
 from mcpbr.harnesses import ClaudeCodeHarness
 
 
+@pytest.mark.integration
 class TestMCPLogging:
     """Tests for MCP server log capture and error handling."""
 
@@ -185,7 +186,7 @@ class TestMCPLogging:
         ]
         assert len(cleanup_calls) >= 1, "Temp files should be cleaned up on timeout"
 
-    def test_mcp_log_path_in_error_message(self, harness: ClaudeCodeHarness) -> None:
+    def test_mcp_log_path_in_error_message(self) -> None:
         """Test that MCP log path is included in error messages."""
         # This is tested through the other tests, but we verify the pattern
         instance_id = "django__django-11905"

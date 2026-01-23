@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import shlex
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -635,10 +636,17 @@ class ClaudeCodeHarness:
                 self._console.print(f"[dim]  Command: {self.mcp_server.command} {args_str}[/dim]")
 
             # Register MCP server separately with its own timeout
+            # Use shlex.quote() to prevent shell injection and handle spaces/special characters
+            quoted_workdir = shlex.quote(env.workdir)
+            quoted_env_file = shlex.quote(env_file)
+            quoted_server_name = shlex.quote(mcp_server_name)
+            quoted_command = shlex.quote(self.mcp_server.command)
+            quoted_args = " ".join(shlex.quote(arg) for arg in args)
+
             mcp_add_cmd = [
                 "/bin/bash",
                 "-c",
-                f"cd {env.workdir} && su mcpbr -c 'source {env_file} && cd {env.workdir} && claude mcp add {mcp_server_name} -- {self.mcp_server.command} {args_str}'",
+                f"cd {quoted_workdir} && su mcpbr -c 'source {quoted_env_file} && cd {quoted_workdir} && claude mcp add {quoted_server_name} -- {quoted_command} {quoted_args}'",
             ]
 
             try:
@@ -652,22 +660,35 @@ class ClaudeCodeHarness:
                     error_msg = f"MCP server registration failed (exit {mcp_exit_code})"
                     if mcp_stderr:
                         error_msg += f": {mcp_stderr}"
+                    if mcp_stdout:
+                        error_msg += f"\nStdout: {mcp_stdout}"
                     if verbose:
                         self._console.print(f"[red]✗ {error_msg}[/red]")
+
+                    # Clean up temp files before early return
+                    await env.exec_command(f"rm -f {prompt_file} {env_file}", timeout=5)
+
                     return AgentResult(
                         patch="",
                         success=False,
                         error=error_msg,
+                        stdout=mcp_stdout,
                         stderr=mcp_stderr,
                     )
 
                 if verbose:
                     self._console.print("[green]✓ MCP server registered successfully[/green]")
+                    if mcp_stdout.strip():
+                        self._console.print(f"[dim]{mcp_stdout.strip()}[/dim]")
 
             except asyncio.TimeoutError:
                 error_msg = "MCP server registration timed out after 60s. The MCP server may have failed to start or is hanging during initialization."
                 if verbose:
                     self._console.print(f"[red]✗ {error_msg}[/red]")
+
+                # Clean up temp files before early return
+                await env.exec_command(f"rm -f {prompt_file} {env_file}", timeout=5)
+
                 return AgentResult(
                     patch="",
                     success=False,
@@ -888,8 +909,9 @@ class ClaudeCodeHarness:
                     mcp_log_file.close()
                     if verbose and mcp_log_path:
                         self._console.print(f"[dim]MCP server logs saved to: {mcp_log_path}[/dim]")
-                except Exception:
-                    pass
+                except Exception as e:
+                    if verbose:
+                        self._console.print(f"[dim red]Failed to close MCP log file: {e}[/dim red]")
 
             await env.exec_command(f"rm -f {prompt_file} {env_file}", timeout=5)
 

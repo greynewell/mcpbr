@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Test that the Docker label fix handles integer instance_ids correctly."""
 
+import pytest
+
 
 def test_docker_labels_with_integer_instance_id():
     """Test that Docker labels work with integer instance_id values."""
@@ -37,39 +39,26 @@ def test_docker_labels_with_integer_instance_id():
     print("✓ Test 2 passed: Integer instance_id converted to string")
 
     # Test case 3: Demonstrate the old bug (without str())
-    try:
-        labels_buggy = {
-            "mcpbr": "true",
-            "mcpbr.instance": instance_id_int,  # Bug: passing int directly
-            "mcpbr.session": "test-session",
-        }
+    labels_buggy = {
+        "mcpbr": "true",
+        "mcpbr.instance": instance_id_int,  # Bug: passing int directly
+        "mcpbr.session": "test-session",
+    }
 
-        # Docker library would try to do something like:
-        # label_str = "mcpbr.instance=" + instance_id_int
-        # This would raise TypeError
+    # Verify that string concatenation with int raises TypeError
+    with pytest.raises(TypeError):
         for key, value in labels_buggy.items():
             if not isinstance(value, str):
                 # Simulate what Docker library does internally
                 _ = key + "=" + value  # This will fail with int
-
-    except TypeError as e:
-        print(f"✓ Test 3 passed: Confirmed old bug would fail with: {e}")
-        return True
-
-    print("✗ Test 3 failed: Should have caught TypeError")
-    return False
 
 
 if __name__ == "__main__":
     print("Testing Docker label fix...")
     print("=" * 60)
 
-    success = test_docker_labels_with_integer_instance_id()
+    test_docker_labels_with_integer_instance_id()
 
     print("=" * 60)
-    if success:
-        print("✓ All tests passed! The fix resolves the issue.")
-        exit(0)
-    else:
-        print("✗ Tests failed!")
-        exit(1)
+    print("✓ All tests passed! The fix resolves the issue.")
+    exit(0)

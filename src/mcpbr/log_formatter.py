@@ -171,11 +171,15 @@ class StreamEventFormatter:
         if tool_name in ("Read", "read_file"):
             file_path = tool_input.get("file_path", tool_input.get("path", ""))
             file_path = self._shorten_path(file_path)
-            offset = tool_input.get("offset", "")
-            limit = tool_input.get("limit", "")
-            if offset or limit:
+            offset = tool_input.get("offset")
+            limit = tool_input.get("limit")
+            if offset is not None or limit is not None:
+                # Ensure offset and limit are integers for arithmetic
+                offset = int(offset) if offset is not None else 0
+                limit = int(limit) if limit is not None else 0
+                end_line = offset + limit if limit else "..."
                 summaries.append(
-                    f"{file_path} (lines {offset}-{offset + limit if limit else '...'})"
+                    f"{file_path} (lines {offset}-{end_line})"
                 )
             else:
                 summaries.append(file_path)

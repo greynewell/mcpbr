@@ -4,6 +4,7 @@ Regression tests for TypeError bug when Read tool uses offset/limit parameters.
 """
 
 import pytest
+from rich.console import Console
 
 from mcpbr.log_formatter import FormatterConfig, StreamEventFormatter
 
@@ -14,8 +15,9 @@ class TestReadToolSummarization:
     @pytest.fixture
     def formatter(self):
         """Create a formatter instance for testing."""
+        console = Console()
         config = FormatterConfig(verbosity=2)  # verbosity >= 2 required for summaries
-        return StreamEventFormatter(config)
+        return StreamEventFormatter(console, config)
 
     def test_read_without_offset_limit(self, formatter):
         """Test Read tool without offset or limit parameters."""

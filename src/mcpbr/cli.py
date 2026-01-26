@@ -411,55 +411,6 @@ def run(
         console.print(f"[red]Error loading config: {e}[/red]")
         sys.exit(1)
 
-    # Determine output directory
-    from datetime import datetime
-
-    if output_dir:
-        # CLI flag takes precedence
-        final_output_dir = output_dir
-    elif config.output_dir:
-        # Config setting
-        final_output_dir = Path(config.output_dir)
-    else:
-        # Default: timestamped directory
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        final_output_dir = Path(f".mcpbr_run_{timestamp}")
-
-    # Create output directory
-    final_output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Copy config file to output directory
-    import shutil
-
-    config_copy_path = final_output_dir / "config.yaml"
-    shutil.copy2(config_path, config_copy_path)
-
-    # Create README.txt in output directory
-    readme_content = f"""This directory contains the complete output from an mcpbr evaluation run.
-
-Started: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-Config: {config_path.name}
-Benchmark: {config.benchmark}
-Model: {config.model}
-Provider: {config.provider}
-
-Files:
-- config.yaml: Configuration used for this run
-- evaluation_state.json: Per-task results and state
-- logs/: Detailed execution traces (MCP server logs)
-
-To analyze results:
-  mcpbr state --state-dir {final_output_dir}
-
-To archive:
-  tar -czf results.tar.gz {final_output_dir.name}
-"""
-    (final_output_dir / "README.txt").write_text(readme_content)
-
-    # Override state_dir to use output directory if not explicitly set
-    if state_dir is None:
-        state_dir = final_output_dir
-
     if model_override:
         config.model = model_override
 
@@ -489,6 +440,58 @@ To archive:
             console.print("[red]Error: Budget must be positive[/red]")
             sys.exit(1)
         config.budget = budget
+
+    # Determine output directory AFTER all CLI overrides are applied
+    import shutil
+    from datetime import datetime
+
+    if output_dir:
+        # CLI flag takes precedence
+        final_output_dir = output_dir
+    elif config.output_dir:
+        # Config setting
+        final_output_dir = Path(config.output_dir)
+    else:
+        # Default: timestamped directory
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        final_output_dir = Path(f".mcpbr_run_{timestamp}")
+
+    # Override state_dir to use output directory if not explicitly set
+    if state_dir is None:
+        state_dir = final_output_dir
+
+    # Create output directory
+    final_output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Copy config file to output directory with SameFileError handling
+    config_copy_path = final_output_dir / "config.yaml"
+    try:
+        shutil.copy2(config_path, config_copy_path)
+    except shutil.SameFileError:
+        # Skip copy if source and destination are the same file
+        pass
+
+    # Create README.txt in output directory with finalized config values
+    readme_content = f"""This directory contains the complete output from an mcpbr evaluation run.
+
+Started: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+Config: {config_path.name}
+Benchmark: {config.benchmark}
+Model: {config.model}
+Provider: {config.provider}
+
+Files:
+- config.yaml: Configuration used for this run
+- evaluation_state.json: Per-task results and state
+- logs/: Detailed execution traces (MCP server logs)
+
+To analyze results:
+  mcpbr state --state-dir {final_output_dir}
+
+To archive:
+  tar -czf results.tar.gz {final_output_dir.name}
+"""
+    (final_output_dir / "README.txt").write_text(readme_content)
 
     # Initialize state tracker for incremental evaluation
     state_tracker = None

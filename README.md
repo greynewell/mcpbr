@@ -803,6 +803,8 @@ mcpbr run -c config.yaml --output-dir ./my-results
 output_dir: "./my-results"
 ```
 
+**Note:** The `--output-dir` CLI flag takes precedence over the `output_dir` config setting. This ensures that the README.txt file in the output directory reflects the final effective configuration values after all CLI overrides are applied.
+
 ### Markdown Report (`--report`)
 
 Generates a human-readable report with:

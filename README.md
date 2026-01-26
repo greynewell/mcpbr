@@ -296,6 +296,9 @@ dataset: "SWE-bench/SWE-bench_Lite"
 sample_size: 10
 timeout_seconds: 300
 max_concurrent: 4
+
+# Optional: disable default logging (logs are saved to output_dir/logs/ by default)
+# disable_logs: true
 ```
 
 4. **Run the evaluation:**
@@ -519,7 +522,8 @@ Run SWE-bench evaluation with the configured MCP server.
 | `--output-junit PATH` | | Path to save JUnit XML report (for CI/CD integration) |
 | `--verbose` | `-v` | Verbose output (`-v` summary, `-vv` detailed) |
 | `--log-file PATH` | `-l` | Path to write raw JSON log output (single file) |
-| `--log-dir PATH` | | Directory to write per-instance JSON log files |
+| `--log-dir PATH` | | Directory to write per-instance JSON log files (default: `output_dir/logs/`) |
+| `--disable-logs` | | Disable detailed execution logs (overrides default and config) |
 | `--task TEXT` | `-t` | Run specific task(s) by instance_id (repeatable) |
 | `--prompt TEXT` | | Override agent prompt (use `{problem_statement}` placeholder) |
 | `--baseline-results PATH` | | Path to baseline results JSON for regression detection |
@@ -813,6 +817,17 @@ Generates a human-readable report with:
 - Analysis of which tasks each agent solved
 
 ### Per-Instance Logs (`--log-dir`)
+
+**Logging is enabled by default** to prevent data loss. Detailed execution traces are automatically saved to `output_dir/logs/` unless disabled.
+
+To disable logging:
+```bash
+# Via CLI flag
+mcpbr run -c config.yaml --disable-logs
+
+# Or in config file
+disable_logs: true
+```
 
 Creates a directory with detailed JSON log files for each task run. Filenames include timestamps to prevent overwrites:
 

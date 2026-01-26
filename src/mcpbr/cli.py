@@ -200,7 +200,12 @@ def main() -> None:
     "log_dir_path",
     type=click.Path(path_type=Path),
     default=None,
-    help="Directory to write per-instance JSON log files",
+    help="Directory to write per-instance JSON log files (default: .mcpbr_state/logs/)",
+)
+@click.option(
+    "--disable-logs",
+    is_flag=True,
+    help="Disable detailed execution logs (overrides default and config)",
 )
 @click.option(
     "--task",
@@ -349,6 +354,7 @@ def run(
     verbosity: int,
     log_file_path: Path | None,
     log_dir_path: Path | None,
+    disable_logs: bool,
     task_ids: tuple[str, ...],
     prompt_override: str | None,
     no_prebuilt: bool,
@@ -542,6 +548,21 @@ To archive:
                 "\n[yellow]Use --skip-health-check to proceed anyway (not recommended)[/yellow]"
             )
             sys.exit(1)
+        console.print()
+
+    # Enable default logging if not explicitly disabled
+    # Priority: CLI flags > config disable_logs > defaults
+    if disable_logs or config.disable_logs:
+        # User explicitly disabled logs
+        log_dir_path = None
+        log_file_path = None
+    elif not log_dir_path and not log_file_path:
+        # No explicit logging specified, enable default log directory in output_dir
+        log_dir_path = final_output_dir / "logs"
+        console.print(f"[dim]Logging enabled (default): {log_dir_path}/[/dim]")
+        console.print(
+            "[dim]To disable: use --disable-logs flag or set disable_logs: true in config[/dim]"
+        )
         console.print()
 
     console.print("[bold]mcpbr Evaluation[/bold]")

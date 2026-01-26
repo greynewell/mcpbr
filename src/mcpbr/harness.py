@@ -645,6 +645,9 @@ async def run_evaluation(
     tasks = benchmark.load_tasks(
         sample_size=config.sample_size,
         task_ids=task_ids,
+        filter_difficulty=config.filter_difficulty,
+        filter_category=config.filter_category,
+        filter_tags=config.filter_tags,
     )
 
     # Apply state tracker filtering and resume logic

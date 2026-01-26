@@ -157,6 +157,21 @@ class HarnessConfig(BaseModel):
         description="Disable detailed execution logs (logs are enabled by default to output_dir/logs/)",
     )
 
+    filter_difficulty: list[str] | None = Field(
+        default=None,
+        description="Filter benchmarks by difficulty (e.g., ['easy', 'medium', 'hard'] or ['0', '1', '2', '3'] for CyberGym)",
+    )
+
+    filter_category: list[str] | None = Field(
+        default=None,
+        description="Filter benchmarks by category (e.g., ['browser', 'finance'] for MCPToolBench)",
+    )
+
+    filter_tags: list[str] | None = Field(
+        default=None,
+        description="Filter benchmarks by tags (requires all tags to match)",
+    )
+
     @field_validator("provider")
     @classmethod
     def validate_provider(cls, v: str) -> str:

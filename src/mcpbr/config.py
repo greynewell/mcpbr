@@ -151,6 +151,11 @@ class HarnessConfig(BaseModel):
         description="Directory for all evaluation outputs (logs, state, results). Default: .mcpbr_run_TIMESTAMP",
     )
 
+    disable_logs: bool = Field(
+        default=False,
+        description="Disable detailed execution logs (logs are enabled by default to .mcpbr_state/logs/)",
+    )
+
     @field_validator("provider")
     @classmethod
     def validate_provider(cls, v: str) -> str:

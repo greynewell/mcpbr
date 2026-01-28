@@ -504,16 +504,27 @@ def print_summary(results: "EvaluationResults", console: Console) -> None:
 
     if total_diff is not None:
         console.print()
-        if total_diff > 0:
-            console.print(
-                f"[bold]MCP Additional Cost:[/bold] {format_cost(total_diff)} "
-                f"({abs(total_diff) / baseline.get('total_cost', 1) * 100:+.1f}%)"
-            )
+        baseline_cost = baseline.get("total_cost", 0)
+        if baseline_cost > 0:
+            pct = abs(total_diff) / baseline_cost * 100
+            if total_diff > 0:
+                console.print(
+                    f"[bold]MCP Additional Cost:[/bold] {format_cost(total_diff)} ({pct:+.1f}%)"
+                )
+            else:
+                console.print(
+                    f"[bold]MCP Cost Savings:[/bold] {format_cost(abs(total_diff))} ({pct:.1f}%)"
+                )
         else:
-            console.print(
-                f"[bold]MCP Cost Savings:[/bold] {format_cost(abs(total_diff))} "
-                f"({abs(total_diff) / baseline.get('total_cost', 1) * 100:.1f}%)"
-            )
+            # No baseline cost available (e.g., --mcp-only mode)
+            if total_diff > 0:
+                console.print(
+                    f"[bold]MCP Additional Cost:[/bold] {format_cost(total_diff)} (N/A - no baseline)"
+                )
+            else:
+                console.print(
+                    f"[bold]MCP Cost Savings:[/bold] {format_cost(abs(total_diff))} (N/A - no baseline)"
+                )
 
     if cost_per_additional is not None:
         console.print(
@@ -791,16 +802,23 @@ def save_markdown_report(results: "EvaluationResults", output_path: Path) -> Non
     cost_per_additional = cost_comparison.get("cost_per_additional_resolution")
 
     if total_diff is not None:
-        if total_diff > 0:
-            lines.append(
-                f"**MCP Additional Cost:** {format_cost(total_diff)} "
-                f"({abs(total_diff) / baseline.get('total_cost', 1) * 100:+.1f}%)"
-            )
+        baseline_cost = baseline.get("total_cost", 0)
+        if baseline_cost > 0:
+            pct = abs(total_diff) / baseline_cost * 100
+            if total_diff > 0:
+                lines.append(f"**MCP Additional Cost:** {format_cost(total_diff)} ({pct:+.1f}%)")
+            else:
+                lines.append(f"**MCP Cost Savings:** {format_cost(abs(total_diff))} ({pct:.1f}%)")
         else:
-            lines.append(
-                f"**MCP Cost Savings:** {format_cost(abs(total_diff))} "
-                f"({abs(total_diff) / baseline.get('total_cost', 1) * 100:.1f}%)"
-            )
+            # No baseline cost available (e.g., --mcp-only mode)
+            if total_diff > 0:
+                lines.append(
+                    f"**MCP Additional Cost:** {format_cost(total_diff)} (N/A - no baseline)"
+                )
+            else:
+                lines.append(
+                    f"**MCP Cost Savings:** {format_cost(abs(total_diff))} (N/A - no baseline)"
+                )
 
     if cost_per_additional is not None:
         lines.append(f"**Cost per Additional Resolution:** {format_cost(cost_per_additional)}")

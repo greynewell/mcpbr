@@ -21,7 +21,6 @@ class TestJUnitXMLGeneration:
                     "provider": "anthropic",
                     "agent_harness": "claude-code",
                     "benchmark": "swe-bench-lite",
-                    "dataset": "SWE-bench/SWE-bench_Lite",
                     "sample_size": 2,
                     "timeout_seconds": 300,
                     "max_iterations": 10,
@@ -107,7 +106,6 @@ class TestJUnitXMLGeneration:
                     "provider": "anthropic",
                     "agent_harness": "claude-code",
                     "benchmark": "swe-bench-lite",
-                    "dataset": "SWE-bench/SWE-bench_Lite",
                     "sample_size": 1,
                     "timeout_seconds": 300,
                     "max_iterations": 10,
@@ -179,7 +177,6 @@ class TestJUnitXMLGeneration:
                     "provider": "anthropic",
                     "agent_harness": "claude-code",
                     "benchmark": "swe-bench-lite",
-                    "dataset": "SWE-bench/SWE-bench_Lite",
                     "sample_size": 1,
                     "timeout_seconds": 300,
                     "max_iterations": 10,
@@ -244,7 +241,6 @@ class TestJUnitXMLGeneration:
                     "provider": "anthropic",
                     "agent_harness": "claude-code",
                     "benchmark": "swe-bench-lite",
-                    "dataset": "SWE-bench/SWE-bench_Lite",
                     "sample_size": 1,
                     "timeout_seconds": 300,
                     "max_iterations": 10,
@@ -302,7 +298,6 @@ class TestJUnitXMLGeneration:
                     "provider": "anthropic",
                     "agent_harness": "claude-code",
                     "benchmark": "swe-bench-lite",
-                    "dataset": "SWE-bench/SWE-bench_Lite",
                     "sample_size": 1,
                     "timeout_seconds": 300,
                     "max_iterations": 10,
@@ -360,7 +355,6 @@ class TestJUnitXMLGeneration:
                     "provider": "anthropic",
                     "agent_harness": "claude-code",
                     "benchmark": "swe-bench-lite",
-                    "dataset": "SWE-bench/SWE-bench_Lite",
                     "sample_size": 1,
                     "timeout_seconds": 300,
                     "max_iterations": 10,
@@ -418,7 +412,6 @@ class TestJUnitXMLGeneration:
                     "provider": "anthropic",
                     "agent_harness": "claude-code",
                     "benchmark": "swe-bench-lite",
-                    "dataset": "SWE-bench/SWE-bench_Lite",
                     "sample_size": 1,
                     "timeout_seconds": 300,
                     "max_iterations": 10,
@@ -479,7 +472,6 @@ class TestJUnitXMLGeneration:
                     "provider": "anthropic",
                     "agent_harness": "claude-code",
                     "benchmark": "swe-bench-lite",
-                    "dataset": "SWE-bench/SWE-bench_Lite",
                     "sample_size": 1,
                     "timeout_seconds": 300,
                     "max_iterations": 10,
@@ -531,7 +523,6 @@ class TestJUnitXMLGeneration:
         assert prop_dict["provider"] == "anthropic"
         assert prop_dict["agent_harness"] == "claude-code"
         assert prop_dict["benchmark"] == "swe-bench-lite"
-        assert prop_dict["dataset"] == "SWE-bench/SWE-bench_Lite"
         assert prop_dict["mcp_command"] == "npx"
 
     def test_cybergym_level_in_properties(self, tmp_path: Path) -> None:
@@ -602,7 +593,6 @@ class TestJUnitXMLGeneration:
                     "provider": "anthropic",
                     "agent_harness": "claude-code",
                     "benchmark": "swe-bench-lite",
-                    "dataset": "SWE-bench/SWE-bench_Lite",
                     "sample_size": 1,
                     "timeout_seconds": 300,
                     "max_iterations": 10,
@@ -667,7 +657,6 @@ class TestJUnitXMLGeneration:
                     "provider": "anthropic",
                     "agent_harness": "claude-code",
                     "benchmark": "swe-bench-lite",
-                    "dataset": "SWE-bench/SWE-bench_Lite",
                     "sample_size": 1,
                     "timeout_seconds": 300,
                     "max_iterations": 10,
@@ -719,7 +708,6 @@ class TestJUnitXMLGeneration:
                     "provider": "anthropic",
                     "agent_harness": "claude-code",
                     "benchmark": "swe-bench-lite",
-                    "dataset": "SWE-bench/SWE-bench_Lite",
                     "sample_size": 1,
                     "timeout_seconds": 300,
                     "max_iterations": 10,
@@ -773,7 +761,6 @@ class TestJUnitXMLGeneration:
                     "provider": "anthropic",
                     "agent_harness": "claude-code",
                     "benchmark": "swe-bench-lite",
-                    "dataset": "SWE-bench/SWE-bench_Lite",
                     "sample_size": 1,
                     "timeout_seconds": 300,
                     "max_iterations": 10,

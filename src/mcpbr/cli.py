@@ -400,7 +400,7 @@ def run(
       mcpbr run -c config.yaml -M                 # MCP only
       mcpbr run -c config.yaml -B                 # Baseline only
       mcpbr run -c config.yaml -n 10              # Sample 10 tasks
-      mcpbr run -c config.yaml -b swe-bench-lite  # Use Lite dataset (300 tasks)
+      mcpbr run -c config.yaml -b swe-bench-lite  # Use Lite benchmark (300 tasks)
       mcpbr run -c config.yaml -v                 # Verbose output
       mcpbr run -c config.yaml -o out.json -r report.md
       mcpbr benchmarks                            # List all available benchmarks
@@ -612,8 +612,6 @@ To archive:
     console.print(f"  Benchmark: {config.benchmark}")
     if config.benchmark == "cybergym":
         console.print(f"  CyberGym Level: {config.cybergym_level}")
-    dataset_display = config.dataset if config.dataset else "default"
-    console.print(f"  Dataset: {dataset_display}")
     console.print(f"  Sample size: {config.sample_size or 'full'}")
     console.print(f"  Run MCP: {run_mcp}, Run Baseline: {run_baseline}")
     console.print(f"  Pre-built images: {config.use_prebuilt_images}")

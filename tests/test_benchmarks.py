@@ -52,11 +52,6 @@ class TestBenchmarkRegistry:
         assert isinstance(benchmark, CyberGymBenchmark)
         assert benchmark.name == "cybergym"
 
-    def test_create_with_custom_dataset(self) -> None:
-        """Test creating benchmark with custom dataset."""
-        benchmark = create_benchmark("swe-bench-lite", dataset="custom/dataset")
-        assert benchmark.dataset == "custom/dataset"
-
     def test_create_cybergym_with_level(self) -> None:
         """Test creating CyberGym with difficulty level."""
         benchmark = create_benchmark("cybergym", level=2)
@@ -67,11 +62,6 @@ class TestBenchmarkRegistry:
         benchmark = create_benchmark("mcptoolbench")
         assert isinstance(benchmark, MCPToolBenchmark)
         assert benchmark.name == "mcptoolbench"
-
-    def test_create_mcptoolbench_with_custom_dataset(self) -> None:
-        """Test creating MCPToolBench++ with custom dataset."""
-        benchmark = create_benchmark("mcptoolbench", dataset="custom/dataset")
-        assert benchmark.dataset == "custom/dataset"
 
     def test_create_unknown_benchmark(self) -> None:
         """Test creating unknown benchmark raises error."""

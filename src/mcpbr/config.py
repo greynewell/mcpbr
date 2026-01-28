@@ -102,11 +102,6 @@ class HarnessConfig(BaseModel):
         description="Benchmark to run (swe-bench-lite, swe-bench-verified, swe-bench-full, cybergym, mcptoolbench)",
     )
 
-    dataset: str | None = Field(
-        default=None,
-        description="HuggingFace dataset to use (optional, benchmark provides default)",
-    )
-
     cybergym_level: int = Field(
         default=1,
         description="CyberGym difficulty level (0-3), controls context given to agent",

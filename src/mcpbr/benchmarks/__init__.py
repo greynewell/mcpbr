@@ -14,18 +14,10 @@ __all__ = [
     "CyberGymBenchmark",
     "MCPToolBenchmark",
     "BENCHMARK_REGISTRY",
-    "SWEBENCH_DATASETS",
     "create_benchmark",
     "list_benchmarks",
 ]
 
-
-# Dataset mapping for SWE-bench variants
-SWEBENCH_DATASETS = {
-    "swe-bench-lite": "SWE-bench/SWE-bench_Lite",
-    "swe-bench-verified": "SWE-bench/SWE-bench_Verified",
-    "swe-bench-full": "SWE-bench/SWE-bench",
-}
 
 BENCHMARK_REGISTRY: dict[str, type[SWEBenchmark | CyberGymBenchmark | MCPToolBenchmark]] = {
     "swe-bench-lite": SWEBenchmark,
@@ -55,9 +47,14 @@ def create_benchmark(name: str, **kwargs: Any) -> Benchmark:
 
     benchmark_class = BENCHMARK_REGISTRY[name]
 
-    # For SWE-bench variants, auto-set the dataset if not provided
-    if name in SWEBENCH_DATASETS and "dataset" not in kwargs:
-        kwargs["dataset"] = SWEBENCH_DATASETS[name]
+    # Auto-set dataset for SWE-bench variants based on benchmark name
+    swebench_datasets = {
+        "swe-bench-lite": "SWE-bench/SWE-bench_Lite",
+        "swe-bench-verified": "SWE-bench/SWE-bench_Verified",
+        "swe-bench-full": "SWE-bench/SWE-bench",
+    }
+    if name in swebench_datasets:
+        kwargs["dataset"] = swebench_datasets[name]
 
     return benchmark_class(**kwargs)
 

@@ -3,7 +3,7 @@ faq:
   - q: "How do I configure mcpbr to use my MCP server?"
     a: "Configure the mcp_server section in your YAML config file with the command to start your server, args (using {workdir} as placeholder for the task repository path), and any required environment variables."
   - q: "What configuration parameters are available in mcpbr?"
-    a: "Key parameters include mcp_server (command, args, env), provider (anthropic), model, dataset, sample_size, timeout_seconds, max_concurrent, and max_iterations."
+    a: "Key parameters include mcp_server (command, args, env), provider (anthropic), model, benchmark, sample_size, timeout_seconds, max_concurrent, and max_iterations."
   - q: "How do I use environment variables in mcpbr config?"
     a: "Reference environment variables in the env section using ${VAR_NAME} syntax, e.g., SUPERMODEL_API_KEY: '${SUPERMODEL_API_KEY}'. The variable will be expanded from your shell environment at runtime."
   - q: "What is the {workdir} placeholder in mcpbr?"
@@ -104,9 +104,9 @@ agent_prompt: |
 # Model Configuration (use alias or full name)
 model: "sonnet"  # or "claude-sonnet-4-5-20250929"
 
-# Dataset Configuration
-dataset: "SWE-bench/SWE-bench_Lite"
-sample_size: 10  # null for full dataset
+# Benchmark Selection
+benchmark: "swe-bench-lite"  # 300 tasks for quick testing
+sample_size: 10  # null for full benchmark
 
 # Execution Parameters
 timeout_seconds: 300
@@ -283,23 +283,6 @@ Example:
 ```yaml
 benchmark: "swe-bench-verified"  # Use high-quality validated tasks
 sample_size: 50                   # Run 50 tasks
-```
-
-### Dataset Configuration (Advanced)
-
-| Field | Default | Description |
-|-------|---------|-------------|
-| `dataset` | `null` | Override HuggingFace dataset (usually not needed) |
-
-The `dataset` field allows advanced users to override the default dataset for a benchmark. In most cases, you should select the appropriate benchmark instead:
-
-```yaml
-# Preferred: Use benchmark selection
-benchmark: "swe-bench-verified"
-
-# Advanced: Manual dataset override (rarely needed)
-benchmark: "swe-bench-lite"
-dataset: "my-org/custom-swebench-dataset"
 ```
 
 ### Execution Parameters

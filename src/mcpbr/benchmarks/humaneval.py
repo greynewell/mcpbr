@@ -34,6 +34,9 @@ class HumanEvalBenchmark:
         sample_size: int | None = None,
         task_ids: list[str] | None = None,
         level: int | None = None,
+        filter_difficulty: list[str] | None = None,
+        filter_category: list[str] | None = None,
+        filter_tags: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Load tasks from HumanEval dataset.
 
@@ -41,10 +44,17 @@ class HumanEvalBenchmark:
             sample_size: Maximum number of tasks to load (None for all).
             task_ids: Specific task IDs to load (None for all).
             level: Unused for HumanEval (no difficulty levels).
+            filter_difficulty: Unused for HumanEval (no difficulty classification).
+            filter_category: Unused for HumanEval (no category classification).
+            filter_tags: Unused for HumanEval (no tag system).
 
         Returns:
             List of HumanEval task dictionaries.
         """
+        # Silence unused parameter warnings - required by Benchmark protocol
+        _ = filter_difficulty
+        _ = filter_category
+        _ = filter_tags
         dataset = load_dataset(self.dataset, split="test")
 
         if task_ids:

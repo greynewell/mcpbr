@@ -216,13 +216,35 @@ class HumanEvalBenchmark:
         # Ensure Python 3 is available
         await self._setup_python_environment(env)
 
-        # Initialize git repository for change tracking
-        # The harness expects git changes to trigger evaluation
-        await env.exec_command("git init", timeout=10)
-        await env.exec_command("git config user.email 'mcpbr@example.com'", timeout=10)
-        await env.exec_command("git config user.name 'MCPBR'", timeout=10)
-        await env.exec_command(
-            "git add -A && git commit -m 'Initial commit' --allow-empty", timeout=30
+        # Initialize git repository in HOST workdir for change tracking
+        # The harness checks for git changes on the host, so initialize there
+        import subprocess
+
+        host_workdir = env.host_workdir
+        subprocess.run(["git", "init"], cwd=host_workdir, capture_output=True, check=False)
+        subprocess.run(
+            ["git", "config", "user.email", "mcpbr@example.com"],
+            cwd=host_workdir,
+            capture_output=True,
+            check=False,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "MCPBR"],
+            cwd=host_workdir,
+            capture_output=True,
+            check=False,
+        )
+        subprocess.run(
+            ["git", "add", "-A"],
+            cwd=host_workdir,
+            capture_output=True,
+            check=False,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "Initial commit", "--allow-empty"],
+            cwd=host_workdir,
+            capture_output=True,
+            check=False,
         )
 
         return env

@@ -51,7 +51,7 @@ class TestHarnessConfig:
         assert config.model == DEFAULT_MODEL
         assert config.provider == "anthropic"
         assert config.agent_harness == "claude-code"
-        assert config.benchmark == "swe-bench"
+        assert config.benchmark == "swe-bench-verified"
         assert config.agent_prompt is None
         assert config.dataset is None
         assert config.cybergym_level == 1
@@ -99,11 +99,11 @@ class TestHarnessConfig:
         with pytest.raises(ValueError, match="Invalid benchmark"):
             HarnessConfig(mcp_server=mcp, benchmark="invalid")
 
-    def test_benchmark_swebench(self) -> None:
-        """Test that benchmark can be set to swe-bench."""
+    def test_benchmark_swebench_lite(self) -> None:
+        """Test that benchmark can be set to swe-bench-lite."""
         mcp = MCPServerConfig(command="echo", args=[])
-        config = HarnessConfig(mcp_server=mcp, benchmark="swe-bench")
-        assert config.benchmark == "swe-bench"
+        config = HarnessConfig(mcp_server=mcp, benchmark="swe-bench-lite")
+        assert config.benchmark == "swe-bench-lite"
 
     def test_benchmark_cybergym(self) -> None:
         """Test that benchmark can be set to cybergym."""

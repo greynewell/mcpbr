@@ -73,11 +73,11 @@ This ensures:
 ### Example
 
 ```bash
-# Run SWE-bench Lite (default - 300 tasks)
-mcpbr run -c config.yaml -b swe-bench-lite
+# Run SWE-bench Verified (default - manually validated tests)
+mcpbr run -c config.yaml
 
-# Run SWE-bench Verified (manually validated tests)
-mcpbr run -c config.yaml -b swe-bench-verified
+# Run SWE-bench Lite (300 tasks, quick testing)
+mcpbr run -c config.yaml -b swe-bench-lite
 
 # Run SWE-bench Full (2,294 tasks)
 mcpbr run -c config.yaml -b swe-bench-full
@@ -86,15 +86,15 @@ mcpbr run -c config.yaml -b swe-bench-full
 mcpbr run -c config.yaml -b swe-bench-lite -t astropy__astropy-12907 -t django__django-11099
 
 # Run sample of tasks
-mcpbr run -c config.yaml -b swe-bench-verified -n 50
+mcpbr run -c config.yaml -n 50
 ```
 
 ### Configuration
 
 ```yaml
 # Choose a SWE-bench variant:
-benchmark: "swe-bench-lite"      # Default: 300 tasks, quick testing
-# benchmark: "swe-bench-verified"  # Manually validated, high quality
+benchmark: "swe-bench-verified"  # Default: manually validated, high quality
+# benchmark: "swe-bench-lite"      # 300 tasks, quick testing
 # benchmark: "swe-bench-full"      # Complete: 2,294 tasks
 
 sample_size: 25

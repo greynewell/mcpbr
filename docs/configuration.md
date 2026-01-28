@@ -268,13 +268,13 @@ See [Installation](installation.md#supported-models) for the full list of suppor
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `benchmark` | `"swe-bench-lite"` | Benchmark to run |
+| `benchmark` | `"swe-bench-verified"` | Benchmark to run |
 | `sample_size` | `null` | Number of tasks (`null` = full dataset) |
 
 Available benchmarks:
 
-- **swe-bench-lite** (or `swe-bench`): 300 curated tasks, quick testing (default)
-- **swe-bench-verified**: Manually validated test cases, accurate benchmarking
+- **swe-bench-verified**: Manually validated test cases, accurate benchmarking (default)
+- **swe-bench-lite**: 300 curated tasks, quick testing
 - **swe-bench-full**: 2,294 tasks, comprehensive evaluation
 - **cybergym**: Security exploits at various difficulty levels
 - **mcptoolbench**: MCP tool usage evaluation

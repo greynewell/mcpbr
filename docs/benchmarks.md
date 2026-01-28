@@ -6,7 +6,7 @@ mcpbr supports multiple software engineering benchmarks through a flexible abstr
 
 | Benchmark | Tasks | Type | Evaluation | Pre-built Images |
 |-----------|-------|------|------------|------------------|
-| **swe-bench-verified** | Subset | Bug fixing | Test suite pass/fail | Yes (most tasks) |
+| **swe-bench-verified** | 500 | Bug fixing | Test suite pass/fail | Yes (most tasks) |
 | **swe-bench-lite** | 300 | Bug fixing | Test suite pass/fail | Yes (most tasks) |
 | **swe-bench-full** | 2,294 | Bug fixing | Test suite pass/fail | Yes (most tasks) |
 | **cybergym** | Varies | Security exploits | Crash detection | No |
@@ -20,7 +20,7 @@ mcpbr provides three SWE-bench variants as distinct benchmarks:
 ### swe-bench-verified (Default)
 - **Benchmark ID**: `swe-bench-verified`
 - **Dataset**: [SWE-bench/SWE-bench_Verified](https://huggingface.co/datasets/SWE-bench/SWE-bench_Verified)
-- **Tasks**: Subset with manually validated test cases
+- **Tasks**: 500 manually validated test cases
 - **Use Case**: Higher quality evaluation with reliable tests, recommended for accurate benchmarking
 - **Quality**: Each task has been manually reviewed to ensure test correctness
 

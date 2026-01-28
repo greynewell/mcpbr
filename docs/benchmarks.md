@@ -19,21 +19,21 @@ mcpbr provides three SWE-bench variants as distinct benchmarks:
 
 ### swe-bench-verified (Default)
 - **Benchmark ID**: `swe-bench-verified`
-- **Dataset**: [SWE-bench/SWE-bench_Verified](https://huggingface.co/datasets/SWE-bench/SWE-bench_Verified)
+- **Dataset**: [princeton-nlp/SWE-bench_Verified](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Verified)
 - **Tasks**: 500 manually validated test cases
 - **Use Case**: Higher quality evaluation with reliable tests, recommended for accurate benchmarking
 - **Quality**: Each task has been manually reviewed to ensure test correctness
 
 ### swe-bench-lite
 - **Benchmark ID**: `swe-bench-lite`
-- **Dataset**: [SWE-bench/SWE-bench_Lite](https://huggingface.co/datasets/SWE-bench/SWE-bench_Lite)
+- **Dataset**: [princeton-nlp/SWE-bench_Lite](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Lite)
 - **Tasks**: 300 curated bug fixes from popular Python repositories
 - **Use Case**: Quick testing and evaluation
 - **Repositories**: Django, Flask, Matplotlib, Pandas, Scikit-learn, SymPy, and more
 
 ### swe-bench-full
 - **Benchmark ID**: `swe-bench-full`
-- **Dataset**: [SWE-bench/SWE-bench](https://huggingface.co/datasets/SWE-bench/SWE-bench)
+- **Dataset**: [princeton-nlp/SWE-bench](https://huggingface.co/datasets/princeton-nlp/SWE-bench)
 - **Tasks**: 2,294 tasks from the complete benchmark
 - **Use Case**: Comprehensive evaluation, research purposes
 

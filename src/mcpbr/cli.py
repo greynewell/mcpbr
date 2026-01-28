@@ -576,6 +576,24 @@ To archive:
     run_baseline = not mcp_only
     verbose = verbosity > 0
 
+    # Validate Docker is running before starting evaluation
+    try:
+        import docker
+
+        docker_client = docker.from_env()
+        docker_client.ping()
+        docker_info = docker_client.info()
+        server_version = docker_info.get("ServerVersion", "unknown")
+        console.print(f"[green]✓ Docker validation passed: Docker {server_version} running[/green]")
+    except docker.errors.DockerException as e:
+        console.print(f"[red]✗ Docker validation failed: Docker not available: {e}[/red]")
+        console.print("[yellow]Make sure Docker Desktop is running[/yellow]")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]✗ Docker validation failed: {e}[/red]")
+        console.print("[yellow]Make sure Docker Desktop is running[/yellow]")
+        sys.exit(1)
+
     # Run MCP pre-flight health check if MCP is enabled
     if run_mcp and not skip_health_check:
         from .smoke_test import run_mcp_preflight_check

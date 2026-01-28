@@ -470,11 +470,43 @@ Remove these resources? [Y/n]:
 
 ## Exit Codes
 
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | Error (configuration, API, etc.) |
-| 130 | Interrupted by user (Ctrl+C) |
+mcpbr uses specific exit codes to indicate different outcomes, making it easier to integrate with scripts and CI/CD pipelines.
+
+| Code | Meaning | When to Use |
+|------|---------|-------------|
+| 0 | Success | At least one task was resolved successfully |
+| 1 | Fatal error | Config invalid, Docker unavailable, API error, crash, or regression threshold exceeded |
+| 2 | No resolutions | Evaluation ran but no tasks were resolved (0% success) |
+| 3 | Nothing evaluated | All tasks were cached/skipped, none actually ran |
+| 130 | Interrupted by user | Evaluation interrupted by Ctrl+C |
+
+### Exit Code Examples
+
+```bash
+# Check exit code after evaluation
+mcpbr run -c config.yaml
+echo $?  # 0 = success, 1 = error, 2 = no resolutions, 3 = all cached
+
+# Use in scripts
+if mcpbr run -c config.yaml; then
+    echo "Evaluation successful"
+else
+    exit_code=$?
+    case $exit_code in
+        1) echo "Fatal error occurred" ;;
+        2) echo "No tasks resolved" ;;
+        3) echo "All tasks cached, use --reset-state to re-run" ;;
+        130) echo "Interrupted by user" ;;
+    esac
+fi
+
+# CI/CD integration
+mcpbr run -c config.yaml
+if [ $? -eq 3 ]; then
+    echo "Results cached, re-running with --reset-state"
+    mcpbr run -c config.yaml --reset-state
+fi
+```
 
 ---
 

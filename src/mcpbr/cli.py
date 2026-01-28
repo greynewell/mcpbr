@@ -418,6 +418,14 @@ def run(
       mcpbr run -c config.yaml --baseline-results baseline.json --regression-threshold 0.1
       mcpbr run -c config.yaml --baseline-results baseline.json --slack-webhook https://...
       mcpbr run -c config.yaml --baseline-results baseline.json --discord-webhook https://...
+
+    \b
+    Exit Codes:
+      0   Success (at least one task resolved)
+      1   Fatal error (invalid config, Docker unavailable, crash)
+      2   No resolutions (evaluation ran but 0% success)
+      3   Nothing evaluated (all tasks cached/skipped)
+      130 Interrupted by user (Ctrl+C)
     """
     register_signal_handlers()
 
@@ -742,6 +750,48 @@ To archive:
             if verbose:
                 console.print_exception()
             sys.exit(1)
+
+    # Determine exit code based on evaluation results
+    exit_code = 0
+
+    # Check if anything was evaluated (exit code 3)
+    incremental_info = results.metadata.get("incremental", {})
+    if incremental_info.get("enabled"):
+        evaluated_count = incremental_info.get("evaluated_tasks", 0)
+        if evaluated_count == 0:
+            console.print("\n[yellow]⚠ No tasks evaluated (all cached)[/yellow]")
+            console.print("[dim]Use --reset-state or --no-incremental to re-run[/dim]")
+            exit_code = 3
+
+    # Check if anything was resolved (exit code 2)
+    # Only check this if we actually evaluated tasks
+    if exit_code == 0:
+        mcp_resolved = results.summary["mcp"]["resolved"]
+        baseline_resolved = results.summary["baseline"]["resolved"]
+        mcp_total = results.summary["mcp"]["total"]
+        baseline_total = results.summary["baseline"]["total"]
+
+        # Only report "no resolutions" if tasks were actually run
+        # If total is 0, no tasks were run (not a failure)
+        if mcp_only and mcp_total > 0 and mcp_resolved == 0:
+            console.print("\n[yellow]⚠ No tasks resolved (0% success)[/yellow]")
+            exit_code = 2
+        elif baseline_only and baseline_total > 0 and baseline_resolved == 0:
+            console.print("\n[yellow]⚠ No tasks resolved (0% success)[/yellow]")
+            exit_code = 2
+        elif not mcp_only and not baseline_only:
+            # For full run, check if either had tasks and none were resolved
+            if (
+                (mcp_total > 0 or baseline_total > 0)
+                and mcp_resolved == 0
+                and baseline_resolved == 0
+            ):
+                console.print("\n[yellow]⚠ No tasks resolved by either agent (0% success)[/yellow]")
+                exit_code = 2
+
+    # Exit with determined exit code
+    if exit_code != 0:
+        sys.exit(exit_code)
 
 
 @main.command(context_settings={"help_option_names": ["-h", "--help"]})

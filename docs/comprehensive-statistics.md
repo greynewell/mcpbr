@@ -329,5 +329,5 @@ stats_dict = stats.to_dict()
 ## See Also
 
 - [Configuration Guide](configuration.md)
-- [MCP Server Guide](mcp-servers.md)
-- [Cost Management](cost-management.md)
+- [MCP Integration](mcp-integration.md)
+- [Best Practices](best-practices.md)

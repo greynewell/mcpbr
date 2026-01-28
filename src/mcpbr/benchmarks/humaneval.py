@@ -219,32 +219,43 @@ class HumanEvalBenchmark:
         # Initialize git repository in HOST workdir for change tracking
         # The harness checks for git changes on the host, so initialize there
         import subprocess
+        from pathlib import Path
 
         host_workdir = env.host_workdir
-        subprocess.run(["git", "init"], cwd=host_workdir, capture_output=True, check=False)
+
+        # Initialize git
+        result = subprocess.run(["git", "init"], cwd=host_workdir, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"Failed to init git in {host_workdir}: {result.stderr}")
+
+        # Configure git user
         subprocess.run(
             ["git", "config", "user.email", "mcpbr@example.com"],
             cwd=host_workdir,
             capture_output=True,
-            check=False,
+            check=True,
         )
         subprocess.run(
             ["git", "config", "user.name", "MCPBR"],
             cwd=host_workdir,
             capture_output=True,
-            check=False,
+            check=True,
+        )
+
+        # Create a README placeholder file so we have something in the initial commit
+        # This is important because git diff needs a HEAD commit to compare against
+        readme_path = Path(host_workdir) / "README.md"
+        readme_path.write_text("# HumanEval Task\n\nWrite your solution in solution.py\n")
+
+        # Add and commit
+        subprocess.run(
+            ["git", "add", "README.md"], cwd=host_workdir, capture_output=True, check=True
         )
         subprocess.run(
-            ["git", "add", "-A"],
+            ["git", "commit", "-m", "Initial commit"],
             cwd=host_workdir,
             capture_output=True,
-            check=False,
-        )
-        subprocess.run(
-            ["git", "commit", "-m", "Initial commit", "--allow-empty"],
-            cwd=host_workdir,
-            capture_output=True,
-            check=False,
+            check=True,
         )
 
         return env

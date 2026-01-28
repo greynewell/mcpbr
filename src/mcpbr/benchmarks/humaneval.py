@@ -161,6 +161,8 @@ class HumanEvalBenchmark:
         Returns:
             TaskEnvironment for the task.
         """
+        import tempfile
+
         # Get instance_id with fallback to task_id (sanitized)
         instance_id = task.get("instance_id")
         if not instance_id:
@@ -168,14 +170,48 @@ class HumanEvalBenchmark:
             task_id = task.get("task_id", "unknown")
             instance_id = task_id.replace("/", "_")
 
-        # Create minimal Python environment
-        temp_task = {
-            "instance_id": instance_id,
-            "repo": "openai/humaneval",
-            "base_commit": "HEAD",
-        }
+        # Create a simple Python environment without git repo cloning
+        # Use fallback image which is a lightweight Python container
+        await docker_manager._ensure_fallback_image()
+        image_name = docker_manager.FALLBACK_IMAGE
 
-        env = await docker_manager.create_environment(temp_task)
+        # Create temporary directory for this task
+        temp_dir = tempfile.TemporaryDirectory(prefix=f"mcpbr_{instance_id}_")
+        docker_manager._temp_dirs.append(temp_dir)
+        host_workdir = temp_dir.name
+
+        container_name = f"mcpbr-{docker_manager._session_id}-{instance_id}"
+        container_workdir = "/workspace"
+
+        # Create container
+        container = docker_manager.client.containers.run(
+            image_name,
+            command="tail -f /dev/null",
+            name=container_name,
+            detach=True,
+            network_mode="bridge",
+            volumes={
+                host_workdir: {"bind": "/workspace", "mode": "rw"},
+            },
+            working_dir=container_workdir,
+            remove=False,
+            labels={
+                "mcpbr": "true",
+                "session_id": docker_manager._session_id,
+                "instance_id": instance_id,
+            },
+        )
+
+        docker_manager._containers.append(container)
+
+        env = TaskEnvironment(
+            container=container,
+            workdir=container_workdir,
+            host_workdir=host_workdir,
+            instance_id=instance_id,
+            uses_prebuilt=False,
+            claude_cli_installed=False,
+        )
 
         # Ensure Python 3 is available
         await self._setup_python_environment(env)

@@ -285,6 +285,70 @@ benchmark: "swe-bench-verified"  # Use high-quality validated tasks
 sample_size: 50                   # Run 50 tasks
 ```
 
+### Filtering Configuration
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `filter_difficulty` | `null` | Filter tasks by difficulty (list of strings) |
+| `filter_category` | `null` | Filter tasks by category (list of strings) |
+| `filter_tags` | `null` | Filter tasks by tags (list of strings, requires all to match) |
+
+Filter benchmarks to select specific subsets of tasks:
+
+```yaml
+# Filter by difficulty (CyberGym: 0-3, MCPToolBench: single/multi)
+filter_difficulty:
+  - "easy"
+  - "medium"
+
+# Filter by category (MCPToolBench: browser, finance, etc.)
+filter_category:
+  - "browser"
+  - "web"
+
+# Filter by tags (requires custom dataset with tags)
+filter_tags:
+  - "security"
+  - "critical"
+```
+
+**Benchmark-specific filtering:**
+
+- **SWE-bench**:
+  - `filter_category`: Filter by repository name (e.g., "django", "scikit-learn")
+  - `filter_difficulty` and `filter_tags`: Not supported in base dataset
+
+- **CyberGym**:
+  - `filter_difficulty`: Numeric levels (0-3) or names (easy, medium, hard, expert)
+  - `filter_category`: Filter by project language (c++, python) or source (arvo, libfuzzer)
+  - `filter_tags`: Not supported in base dataset
+
+- **MCPToolBench++**:
+  - `filter_difficulty`: Task complexity (easy/single, hard/multi)
+  - `filter_category`: Task categories (browser, finance, web, etc.)
+  - `filter_tags`: Not supported in base dataset
+
+!!! tip "CLI Override"
+    Apply filters at runtime:
+    ```bash
+    # Filter by difficulty
+    mcpbr run -c config.yaml --filter-difficulty easy --filter-difficulty medium
+
+    # Filter by category
+    mcpbr run -c config.yaml --filter-category browser --filter-category finance
+
+    # Combine multiple filters
+    mcpbr run -c config.yaml \
+      --filter-difficulty hard \
+      --filter-category security
+    ```
+
+!!! note "Filter Behavior"
+    - Filters are applied after task_ids selection but before sample_size
+    - Multiple values within a filter are OR'ed (task matches ANY value)
+    - Multiple different filters are AND'ed (task must match ALL filter types)
+    - Empty filter lists are treated as no filter (all tasks pass)
+
 ### Execution Parameters
 
 | Field | Default | Description |

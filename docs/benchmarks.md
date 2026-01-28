@@ -99,7 +99,20 @@ benchmark: "swe-bench-verified"  # Default: manually validated, high quality
 
 sample_size: 25
 use_prebuilt_images: true  # Recommended
+
+# Optional: Filter tasks by repository
+filter_category:
+  - "django"
+  - "scikit-learn"
 ```
+
+**Filtering SWE-bench Tasks:**
+
+- `filter_category`: Filter by repository name (e.g., "django", "scikit-learn", "sympy")
+- Example: Only run Django and Flask tasks
+  ```bash
+  mcpbr run -c config.yaml --filter-category django --filter-category flask
+  ```
 
 ## CyberGym
 
@@ -245,7 +258,32 @@ cybergym_level: 2  # 0-3, controls context
 dataset: "sunblaze-ucb/cybergym"  # Optional, this is the default
 sample_size: 10
 timeout_seconds: 600  # CyberGym may need more time for compilation
+
+# Optional: Filter tasks
+filter_difficulty:
+  - "1"  # Medium difficulty (level 1)
+  - "2"  # Hard difficulty (level 2)
+filter_category:
+  - "c++"     # Only C++ vulnerabilities
+  - "arvo"    # Only tasks from arvo fuzzer
 ```
+
+**Filtering CyberGym Tasks:**
+
+- `filter_difficulty`: Filter by difficulty level (0-3) or names (easy, medium, hard, expert)
+- `filter_category`: Filter by project language (c++, python) or source (arvo, libfuzzer)
+- Examples:
+  ```bash
+  # Filter by difficulty levels 2 and 3
+  mcpbr run -c config.yaml --benchmark cybergym \
+    --filter-difficulty 2 --filter-difficulty 3
+
+  # Filter by language
+  mcpbr run -c config.yaml --benchmark cybergym --filter-category c++
+
+  # Filter by difficulty name
+  mcpbr run -c config.yaml --benchmark cybergym --filter-difficulty hard
+  ```
 
 ### Agent Prompt
 

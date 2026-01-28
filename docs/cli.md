@@ -69,6 +69,9 @@ mcpbr run -c CONFIG [OPTIONS]
 | `--log-dir PATH` | | Path | Directory to write per-instance JSON log files |
 | `--task TEXT` | `-t` | String | Run specific task(s) by instance_id (repeatable) |
 | `--prompt TEXT` | | String | Override agent prompt (use `{problem_statement}` placeholder) |
+| `--filter-difficulty TEXT` | | String | Filter benchmarks by difficulty (repeatable) |
+| `--filter-category TEXT` | | String | Filter benchmarks by category (repeatable) |
+| `--filter-tags TEXT` | | String | Filter benchmarks by tags (repeatable) |
 | `--help` | `-h` | Flag | Show help message |
 
 ### Examples
@@ -116,6 +119,25 @@ mcpbr run -c config.yaml --benchmark cybergym --level 3
 
 # Override prompt
 mcpbr run -c config.yaml --prompt "Fix this bug: {problem_statement}"
+```
+
+#### Filter Benchmarks
+
+```bash
+# Filter by difficulty (CyberGym levels or MCPToolBench complexity)
+mcpbr run -c config.yaml --filter-difficulty easy --filter-difficulty medium
+
+# Filter by category (MCPToolBench categories or SWE-bench repos)
+mcpbr run -c config.yaml --filter-category browser --filter-category finance
+
+# Filter by multiple criteria
+mcpbr run -c config.yaml \
+  --filter-difficulty hard \
+  --filter-category security
+
+# CyberGym with difficulty filtering
+mcpbr run -c config.yaml --benchmark cybergym \
+  --filter-difficulty 2 --filter-difficulty 3
 ```
 
 #### Save Results

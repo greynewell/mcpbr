@@ -362,6 +362,21 @@ def main() -> None:
     is_flag=True,
     help="Enable trial mode: isolated state, no caching (for repeated experiments)",
 )
+@click.option(
+    "--filter-difficulty",
+    multiple=True,
+    help="Filter benchmarks by difficulty (can be specified multiple times, e.g., --filter-difficulty easy --filter-difficulty medium)",
+)
+@click.option(
+    "--filter-category",
+    multiple=True,
+    help="Filter benchmarks by category (can be specified multiple times, e.g., --filter-category browser --filter-category finance)",
+)
+@click.option(
+    "--filter-tags",
+    multiple=True,
+    help="Filter benchmarks by tags (can be specified multiple times, requires all tags to match)",
+)
 def run(
     config_path: Path,
     model_override: str | None,
@@ -404,6 +419,9 @@ def run(
     skip_preflight: bool,
     output_dir: Path | None,
     trial_mode: bool,
+    filter_difficulty: tuple[str, ...],
+    filter_category: tuple[str, ...],
+    filter_tags: tuple[str, ...],
 ) -> None:
     """Run benchmark evaluation with the configured MCP server.
 
@@ -527,6 +545,16 @@ def run(
         console.print(f"  • Isolated state dir: {state_dir}")
         console.print("  • Fresh evaluation guaranteed")
         console.print()
+
+    # Apply filter overrides
+    if filter_difficulty:
+        config.filter_difficulty = list(filter_difficulty)
+
+    if filter_category:
+        config.filter_category = list(filter_category)
+
+    if filter_tags:
+        config.filter_tags = list(filter_tags)
 
     # Determine output directory AFTER all CLI overrides are applied
     import shutil

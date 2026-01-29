@@ -377,6 +377,11 @@ def main() -> None:
     multiple=True,
     help="Filter benchmarks by tags (can be specified multiple times, requires all tags to match)",
 )
+@click.option(
+    "--profile",
+    is_flag=True,
+    help="Enable comprehensive performance profiling (tool latency, memory, overhead)",
+)
 def run(
     config_path: Path,
     model_override: str | None,
@@ -422,6 +427,7 @@ def run(
     filter_difficulty: tuple[str, ...],
     filter_category: tuple[str, ...],
     filter_tags: tuple[str, ...],
+    profile: bool,
 ) -> None:
     """Run benchmark evaluation with the configured MCP server.
 
@@ -555,6 +561,9 @@ def run(
 
     if filter_tags:
         config.filter_tags = list(filter_tags)
+
+    if profile:
+        config.enable_profiling = True
 
     # Determine output directory AFTER all CLI overrides are applied
     import shutil

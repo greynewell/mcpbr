@@ -173,6 +173,11 @@ class HarnessConfig(BaseModel):
         description="Filter benchmarks by tags (requires all tags to match)",
     )
 
+    enable_profiling: bool = Field(
+        default=False,
+        description="Enable comprehensive performance profiling (tool latency, memory, overhead)",
+    )
+
     @field_validator("provider")
     @classmethod
     def validate_provider(cls, v: str) -> str:

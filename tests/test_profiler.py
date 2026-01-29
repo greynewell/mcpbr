@@ -155,16 +155,17 @@ class TestPerformanceProfiler:
 
     def test_tool_latency_calculation(self) -> None:
         """Test tool latency statistics calculation."""
+        from datetime import timedelta
+
         profiler = PerformanceProfiler()
 
         # Add multiple tool calls with varying latencies
         base_time = datetime.now(timezone.utc)
         for i in range(10):
             start = base_time
-            end = start
             # Simulate different latencies
             latency_ms = 100 + i * 10  # 100ms to 190ms
-            end = start.replace(microsecond=start.microsecond + latency_ms * 1000)
+            end = start + timedelta(milliseconds=latency_ms)
             profiler.record_tool_call("Read", start, end, True)
 
         latencies = profiler._calculate_tool_latencies()
@@ -445,10 +446,12 @@ class TestProfilingIntegration:
         assert latencies["Read"]["p50_seconds"] == latencies["Read"]["p95_seconds"]
 
         # Two values
+        from datetime import timedelta
+
         profiler2 = PerformanceProfiler()
         base = datetime.now(timezone.utc)
         profiler2.record_tool_call("Read", base, base, True)
-        end2 = base.replace(second=base.second + 1)
+        end2 = base + timedelta(seconds=1)
         profiler2.record_tool_call("Read", base, end2, True)
 
         latencies2 = profiler2._calculate_tool_latencies()

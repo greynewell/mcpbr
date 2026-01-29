@@ -261,12 +261,13 @@ mcpbr run -c config.yaml --profile -o baseline.json
 # Make changes to your MCP server
 # ...
 
-# Run new profiling
-mcpbr run -c config.yaml --profile -o new.json
-
-# Compare results
-mcpbr analyze baseline.json new.json --profile
+# Run new profiling with regression detection
+mcpbr run -c config.yaml --profile -o new.json \
+  --baseline-results baseline.json \
+  --regression-threshold 0.0
 ```
+
+The `--baseline-results` flag compares the new run against the baseline, and `--regression-threshold` sets the acceptable regression rate (0.0 = fail on any regression).
 
 ## API: Using the Profiler Programmatically
 

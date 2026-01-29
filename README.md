@@ -624,6 +624,7 @@ Run SWE-bench evaluation with the configured MCP server.
 | `--smtp-port PORT` | | SMTP server port (default: 587) |
 | `--smtp-user USER` | | SMTP username for authentication |
 | `--smtp-password PASS` | | SMTP password for authentication |
+| `--profile` | | Enable comprehensive performance profiling (tool latency, memory, overhead) |
 | `--help` | `-h` | Show help message |
 
 </details>
@@ -782,7 +783,7 @@ enable_profiling: true
 
 The profiler automatically identifies performance issues:
 
-```
+```text
 - Bash is the slowest tool (avg: 2.3s, p95: 5.1s)
 - Docker startup adds 2.1s overhead per task
 - Fast tool discovery: first tool use in 8.3s

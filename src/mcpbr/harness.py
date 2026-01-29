@@ -126,6 +126,9 @@ def agent_result_to_dict(
     if result.tool_errors:
         data["tool_errors"] = result.tool_errors
 
+    if result.profiling_report:
+        data["profiling"] = result.profiling_report
+
     if result.error:
         data["error"] = result.error
         # Add status field to distinguish timeouts from other errors

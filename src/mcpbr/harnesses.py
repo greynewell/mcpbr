@@ -35,6 +35,7 @@ class AgentResult:
     messages: list[dict[str, Any]] = field(default_factory=list)
     stdout: str = ""
     stderr: str = ""
+    profiling_report: dict[str, Any] | None = None
     cost_usd: float | None = None  # Total cost from API (includes cache tokens)
 
 

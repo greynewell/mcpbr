@@ -209,9 +209,11 @@ class TestPerformanceProfiler:
         profiler.start_task()
 
         # Add slow tool calls
+        from datetime import timedelta
+
         base_time = datetime.now(timezone.utc)
         start = base_time
-        end = start.replace(second=start.second + 5)  # 5 second call
+        end = start + timedelta(seconds=5)  # 5 second call
         profiler.record_tool_call("Bash", start, end, True)
 
         # Add infrastructure overhead

@@ -140,8 +140,10 @@ def agent_result_to_dict(
         data["messages"] = result.messages
 
     if eval_result:
-        data["resolved"] = eval_result.resolved
-        data["patch_applied"] = eval_result.patch_applied
+        data["resolved"] = getattr(eval_result, "resolved", False)
+        data["patch_applied"] = getattr(
+            eval_result, "patch_applied", True
+        )  # Default True for successful evals
 
         if getattr(eval_result, "fail_to_pass", None):
             data["fail_to_pass"] = {

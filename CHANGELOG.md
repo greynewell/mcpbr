@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Infrastructure
+
+- Refactored release workflow to auto-bump version after GitHub UI release
+  - Removed automated release creation workflow (releases now created manually in GitHub UI)
+  - Restored Release Drafter for auto-generating draft releases from PRs
+  - Added post-release workflow that automatically bumps patch version on main after release publish
+
+## [0.4.2] - 2026-01-29
+
+### Documentation
+
+- Added npm package links throughout documentation and README
+- Added thinking_budget configuration documentation with examples and validation notes
+- Fixed incorrect CLI override documentation (thinking_budget is YAML-only, no CLI flag exists)
+- Added npm badge and installation section to docs
+
+## [0.4.1] - 2026-01-29
+
+### Added
+
+- **HumanEval Benchmark** (#304): Code generation benchmark support
+  - Evaluate LLM code generation capabilities on HumanEval dataset
+  - Test function implementations against unit test suites
+  - Automatic solution extraction and evaluation
+- **Extended Thinking Mode** (#332): Support for Claude's extended thinking
+  - `thinking_budget` configuration option (1024-31999 tokens)
+  - Enables deeper reasoning for complex tasks
+  - Validation with clear error messages for invalid values
+  - Environment variable injection for both Docker and local execution
+- **Performance Profiling** (#331): Comprehensive profiling infrastructure
+  - Track tool call latencies with percentiles (p50, p95, p99)
+  - Memory usage monitoring (peak and average RSS/VMS)
+  - Infrastructure overhead measurement (Docker, MCP startup)
+  - Automated insights generation from profiling data
+  - Enable with `--profile` flag or `enable_profiling` config
+- **Benchmark Filtering** (#305): Filter tasks by difficulty, category, and tags
+  - `filter_difficulty` - Filter by task difficulty level
+  - `filter_category` - Filter by task category
+  - `filter_tags` - Filter by custom tags (all must match)
+  - CLI flags: `--filter-difficulty`, `--filter-category`, `--filter-tags`
+- **Runtime Tracking** (#326): Track task execution duration
+  - Records total runtime for each task evaluation
+  - Helps identify performance bottlenecks
+  - Included in profiling reports
+
+### Fixed
+
+- **HumanEval Git Detection** (#335): Fixed git diff not detecting newly created files
+  - Added fallback to unfiltered git diff when filtered diff is empty
+  - Resolves issue where `solution.py` wasn't detected in HumanEval tasks
+  - Applied same pattern to both Docker and local execution paths
+- **Cost Calculation** (#330): Use total_cost_usd from API to include cache tokens
+  - Accurate cost tracking including prompt caching discounts
+  - Prevents underreporting of actual API costs
+
+## [0.4.0] - 2026-01-28
+
 ### Added
 
 - **MCP Server Log Capture** (#287): Comprehensive logging for MCP server debugging
@@ -420,6 +477,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--no-prebuilt` CLI flag to disable pre-built images and build from scratch
 - Network access for containers to enable API calls from within Docker
 
+[0.4.2]: https://github.com/greynewell/mcpbr/releases/tag/v0.4.2
+[0.4.1]: https://github.com/greynewell/mcpbr/releases/tag/v0.4.1
+[0.4.0]: https://github.com/greynewell/mcpbr/releases/tag/v0.4.0
 [0.3.20]: https://github.com/greynewell/mcpbr/releases/tag/v0.3.20
 [0.3.19]: https://github.com/greynewell/mcpbr/releases/tag/v0.3.19
 [0.3.18]: https://github.com/greynewell/mcpbr/releases/tag/v0.3.18

@@ -458,6 +458,64 @@ MCP_PROMPT_SUFFIX = (
 )
 
 
+def _generate_no_patch_error_message(
+    git_status: str,
+    git_stderr: str,
+    buggy_line: str,
+    tool_usage: dict[str, int],
+) -> str:
+    """Generate accurate error message when no patch is produced.
+
+    Args:
+        git_status: Output from 'git status --short'
+        git_stderr: Stderr from git command (may contain 'command not found')
+        buggy_line: Result from buggy line check (empty if not present)
+        tool_usage: Dictionary of tool names to call counts
+
+    Returns:
+        Human-readable error message describing what actually happened
+    """
+    # Check if git is missing
+    if git_stderr and "command not found" in git_stderr:
+        return (
+            "git command not found - ensure git is installed in the environment "
+            "or use prebuilt Docker images with git pre-installed"
+        )
+
+    # Check if files were changed according to git
+    if git_status.strip():
+        return f"Files changed but no valid patch: {git_status.strip()}"
+
+    # Check if any Edit/Write tools were actually called
+    edit_tools = {"Edit", "Write", "NotebookEdit"}
+    tools_used = set(tool_usage.keys())
+    edit_tools_used = tools_used & edit_tools
+
+    # If buggy line is not present (empty), it might have been fixed
+    if not buggy_line:
+        if edit_tools_used:
+            # Edit tools were used but no git changes detected
+            tools_str = ", ".join(sorted(edit_tools_used))
+            return (
+                f"{tools_str} tool(s) used but no changes detected - "
+                "file may be unchanged or changes were reverted"
+            )
+        else:
+            # No edit tools used and buggy line not found
+            # Agent may have completed without making changes
+            if tools_used:
+                tools_list = ", ".join(sorted(tools_used))
+                return (
+                    f"No patches applied - agent completed without making changes. "
+                    f"Tools used: {tools_list}"
+                )
+            else:
+                return "No patches applied - agent made no tool calls"
+    else:
+        # Buggy line is still present
+        return f"Buggy line still present: {buggy_line}"
+
+
 class ClaudeCodeHarness:
     """Harness that uses Claude Code CLI (claude) for solving tasks."""
 
@@ -654,12 +712,29 @@ class ClaudeCodeHarness:
                     timeout=10,
                 )
 
+            # Check git status to understand what happened
+            git_exit, git_status, git_stderr = await _run_cli_command(
+                ["git", "status", "--short"],
+                workdir,
+                timeout=30,
+            )
+
             patch = await _get_git_diff(workdir)
+
+            # Generate appropriate error message if no patch
+            error_msg = None
+            if not patch:
+                error_msg = _generate_no_patch_error_message(
+                    git_status=git_status,
+                    git_stderr=git_stderr,
+                    buggy_line="",  # Local mode doesn't have buggy line check
+                    tool_usage=tool_usage,
+                )
 
             return AgentResult(
                 patch=patch,
                 success=bool(patch),
-                error=None if patch else "No changes made by Claude Code",
+                error=error_msg,
                 iterations=num_turns or 1,
                 stdout=stdout,
                 stderr=stderr,
@@ -1003,7 +1078,7 @@ class ClaudeCodeHarness:
                     environment=docker_env,
                 )
 
-            _, git_status, _ = await env.exec_command(
+            _, git_status, git_stderr = await env.exec_command(
                 "git status --short",
                 timeout=30,
             )
@@ -1025,14 +1100,13 @@ class ClaudeCodeHarness:
             error_msg = None
             if not patch:
                 buggy_line = sep_check.strip()
-                if git_status.strip():
-                    error_msg = f"Files changed but no valid patch: {git_status.strip()}"
-                else:
-                    # If buggy_line is empty, the fix was applied but git didn't detect it
-                    if not buggy_line:
-                        error_msg = "Edit applied but git shows no changes (file unchanged?)"
-                    else:
-                        error_msg = f"Buggy line still present: {buggy_line}"
+                # Use helper function to generate accurate error message
+                error_msg = _generate_no_patch_error_message(
+                    git_status=git_status,
+                    git_stderr=git_stderr,
+                    buggy_line=buggy_line,
+                    tool_usage=tool_usage,
+                )
 
             return AgentResult(
                 patch=patch,

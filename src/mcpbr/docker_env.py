@@ -360,12 +360,70 @@ class DockerEnvironmentManager:
         self._fallback_image_built = True
 
     def _use_fallback_image(self) -> None:
-        """Tag python:3.11-slim as our image if Dockerfile not found."""
+        """Build a comprehensive fallback image if Dockerfile not found.
+
+        Includes all system dependencies commonly needed for SWE-bench tasks:
+        - Version control (git)
+        - Build tools (gcc, g++, make)
+        - SSL/crypto libraries (for requests, urllib3, cryptography)
+        - Database drivers (PostgreSQL, MySQL)
+        - XML processing (lxml)
+        - Image processing (Pillow, matplotlib)
+        - Python testing tools (pytest, coverage)
+        """
         try:
-            img = self.client.images.get("python:3.11-slim")
-            img.tag(self.FALLBACK_IMAGE)
+            # Build a comprehensive fallback image with common SWE-bench dependencies
+            dockerfile_content = """FROM python:3.11-slim
+
+# Install system dependencies commonly needed for SWE-bench tasks
+RUN apt-get update && apt-get install -y --no-install-recommends \\
+    git \\
+    curl \\
+    wget \\
+    vim \\
+    ca-certificates \\
+    build-essential \\
+    libssl-dev \\
+    libffi-dev \\
+    libpq-dev \\
+    default-libmysqlclient-dev \\
+    libxml2-dev \\
+    libxslt1-dev \\
+    libjpeg-dev \\
+    libpng-dev \\
+    zlib1g-dev \\
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+# Install common Python testing tools
+RUN pip install --no-cache-dir \\
+    pytest \\
+    pytest-xdist \\
+    coverage
+
+CMD ["/bin/bash"]
+"""
+            import tempfile
+            import os
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                dockerfile_path = os.path.join(tmpdir, "Dockerfile")
+                with open(dockerfile_path, "w") as f:
+                    f.write(dockerfile_content)
+
+                self.client.images.build(
+                    path=tmpdir,
+                    tag=self.FALLBACK_IMAGE,
+                    rm=True,
+                )
         except Exception:
-            pass
+            # Last resort: just tag the base image
+            try:
+                img = self.client.images.get("python:3.11-slim")
+                img.tag(self.FALLBACK_IMAGE)
+            except Exception:
+                pass
 
     async def create_environment(
         self,

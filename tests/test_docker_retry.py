@@ -1,7 +1,7 @@
 """Tests for Docker retry logic with exponential backoff."""
 
 import time
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import docker.errors
 import pytest
@@ -176,7 +176,7 @@ class TestDockerRetryLogic:
 
         with patch.object(manager, "_copy_repo_to_workspace", return_value=None):
             with patch.object(manager, "_install_claude_cli", return_value=None):
-                env = await manager.create_environment(
+                await manager.create_environment(
                     task={
                         "instance_id": "test-instance",
                         "repo": "test/repo",

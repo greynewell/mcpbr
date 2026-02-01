@@ -12,6 +12,7 @@ mcpbr supports multiple software engineering benchmarks through a flexible abstr
 | **cybergym** | Varies | Security exploits | Crash detection | No |
 | **humaneval** | 164 | Code generation | Unit tests | No |
 | **mcptoolbench** | Varies | Tool use | Output validation | No |
+| **gsm8k** | 1,319 | Math reasoning | Numeric answer matching | No |
 
 ## SWE-bench Variants
 
@@ -479,19 +480,92 @@ Use --benchmark flag with 'run' command to select a benchmark
 Example: mcpbr run -c config.yaml --benchmark humaneval
 ```
 
+## GSM8K
+
+[GSM8K (Grade School Math 8K)](https://github.com/openai/grade-school-math) is a dataset of 8,500 linguistically diverse grade school math word problems created by OpenAI. It tests mathematical reasoning and multi-step problem solving.
+
+### Dataset
+
+- **Source**: [openai/gsm8k](https://huggingface.co/datasets/openai/gsm8k) on HuggingFace
+- **Tasks**: 1,319 test problems (8,792 total including training set)
+- **Problem Types**: Word problems requiring 2-8 steps to solve
+- **Skills Tested**: Arithmetic, algebra, basic reasoning, chain-of-thought
+
+### Task Structure
+
+Each GSM8K task contains:
+
+- **Question**: A natural language word problem
+- **Answer**: A chain-of-thought solution ending with the numeric answer
+
+**Example**:
+```text
+Question: Janet has 5 apples. She buys 3 more apples at the store.
+How many apples does she have now?
+
+Answer: Janet starts with 5 apples. She buys 3 more.
+5 + 3 = 8
+#### 8
+```
+
+### Evaluation
+
+GSM8K evaluation focuses on getting the correct final answer:
+
+1. Agent receives the math problem
+2. Agent shows reasoning (chain-of-thought encouraged but not required)
+3. Agent provides final numeric answer
+4. Answer is extracted and normalized from agent's response
+5. Comparison with ground truth using tolerance for rounding
+
+**Answer Extraction**:
+The evaluation handles multiple answer formats:
+- GSM8K format: `#### 42`
+- LaTeX boxed: `\boxed{42}`
+- Sentence format: "The answer is 42"
+- Dollar amounts: "$1,234.56"
+- Numbers with commas: "1,234"
+
+**Tolerance**:
+Answers are compared with both relative (0.1%) and absolute (0.001) tolerance.
+
+### Best Practices
+
+**For Math Reasoning**:
+- Encourage chain-of-thought in the prompt
+- Break complex problems into smaller steps
+- Use Python for complex arithmetic
+- Verify intermediate calculations
+
+**For Evaluation**:
+- Start with small sample size (n=10) to test setup
+- Increase timeout if agent uses Python calculations
+- Monitor token usage (CoT increases tokens)
+
+**Agent Prompt Tips**:
+```yaml
+agent_prompt: |
+  Solve this math problem step-by-step:
+
+  {problem_statement}
+
+  Show your work clearly. Use Python if needed for calculations.
+  End with: "The answer is: [number]"
+```
+
 ## Comparing Benchmarks
 
-| Aspect | SWE-bench | CyberGym | HumanEval |
-|--------|-----------|----------|-----------|
-| **Goal** | Fix bugs | Exploit vulnerabilities | Generate code |
-| **Output** | Patch (unified diff) | PoC code | Function code |
-| **Languages** | Python | C/C++ | Python |
-| **Evaluation** | Test suite | Crash detection | Unit tests |
-| **Pre-built Images** | Yes (most tasks) | No | No |
-| **Build Requirements** | Python packages | gcc, sanitizers, cmake | Python 3 |
-| **Difficulty Levels** | N/A | 0-3 | N/A |
-| **Typical Timeout** | 300-600s | 600-900s | 60-180s |
-| **Task Count** | 300 (Lite) | Varies | 164 |
+| Aspect | SWE-bench | CyberGym | HumanEval | GSM8K |
+|--------|-----------|----------|-----------|-------|
+| **Goal** | Fix bugs | Exploit vulnerabilities | Generate code | Solve math problems |
+| **Output** | Patch (unified diff) | PoC code | Function code | Numeric answer |
+| **Languages** | Python | C/C++ | Python | N/A (reasoning) |
+| **Evaluation** | Test suite | Crash detection | Unit tests | Answer matching |
+| **Pre-built Images** | Yes (most tasks) | No | No | No |
+| **Build Requirements** | Python packages | gcc, sanitizers, cmake | Python 3 | Python 3, NumPy |
+| **Difficulty Levels** | N/A | 0-3 | N/A | N/A |
+| **Typical Timeout** | 300-600s | 600-900s | 60-180s | 60-180s |
+| **Task Count** | 300 (Lite) | Varies | 164 | 1,319 |
 
 ## Best Practices
 
@@ -519,6 +593,14 @@ Example: mcpbr run -c config.yaml --benchmark humaneval
 - **Great for smoke tests** - run HumanEval first before expensive benchmarks
 - **Low resource usage** - can run higher concurrency (8-16 tasks)
 
+### GSM8K
+
+- **Start with small samples** (10-20 problems) to verify answer extraction
+- **Enable chain-of-thought** in agent prompt for better reasoning
+- **Check answer format** - ensure agent clearly states final number
+- **Low resource usage** - minimal Docker environment needed
+- **Quick evaluation** - problems typically solve in under 3 minutes
+
 ## Related Links
 
 - [SWE-bench Official Site](https://www.swebench.com/)
@@ -528,4 +610,7 @@ Example: mcpbr run -c config.yaml --benchmark humaneval
 - [HumanEval Repository](https://github.com/openai/human-eval)
 - [HumanEval Paper](https://arxiv.org/abs/2107.03374)
 - [HumanEval Dataset](https://huggingface.co/datasets/openai_humaneval)
+- [GSM8K Repository](https://github.com/openai/grade-school-math)
+- [GSM8K Paper](https://arxiv.org/abs/2110.14168)
+- [GSM8K Dataset](https://huggingface.co/datasets/openai/gsm8k)
 - [Epoch AI SWE-bench Images](https://github.com/orgs/Epoch-Research/packages)

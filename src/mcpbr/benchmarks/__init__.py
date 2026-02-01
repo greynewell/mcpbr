@@ -4,6 +4,7 @@ from typing import Any
 
 from .base import Benchmark, BenchmarkTask
 from .cybergym import CyberGymBenchmark
+from .gsm8k import GSM8KBenchmark
 from .humaneval import HumanEvalBenchmark
 from .mcptoolbench import MCPToolBenchmark
 from .swebench import SWEBenchmark
@@ -15,6 +16,7 @@ __all__ = [
     "CyberGymBenchmark",
     "HumanEvalBenchmark",
     "MCPToolBenchmark",
+    "GSM8KBenchmark",
     "BENCHMARK_REGISTRY",
     "create_benchmark",
     "list_benchmarks",
@@ -22,7 +24,8 @@ __all__ = [
 
 
 BENCHMARK_REGISTRY: dict[
-    str, type[SWEBenchmark | CyberGymBenchmark | HumanEvalBenchmark | MCPToolBenchmark]
+    str,
+    type[SWEBenchmark | CyberGymBenchmark | HumanEvalBenchmark | MCPToolBenchmark | GSM8KBenchmark],
 ] = {
     "swe-bench-lite": SWEBenchmark,
     "swe-bench-verified": SWEBenchmark,
@@ -30,6 +33,7 @@ BENCHMARK_REGISTRY: dict[
     "cybergym": CyberGymBenchmark,
     "humaneval": HumanEvalBenchmark,
     "mcptoolbench": MCPToolBenchmark,
+    "gsm8k": GSM8KBenchmark,
 }
 
 

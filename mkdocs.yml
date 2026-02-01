@@ -80,7 +80,41 @@ nav:
       - Best Practices: best-practices.md
       - Configuration: configuration.md
       - CLI Reference: cli.md
-      - Benchmarks: benchmarks.md
+      - Benchmarks:
+          - Overview: benchmarks/index.md
+          - Software Engineering:
+              - SWE-bench: benchmarks/swe-bench.md
+              - APPS: benchmarks/apps.md
+              - CodeContests: benchmarks/codecontests.md
+              - BigCodeBench: benchmarks/bigcodebench.md
+              - LeetCode: benchmarks/leetcode.md
+              - CoderEval: benchmarks/codereval.md
+              - Aider Polyglot: benchmarks/aider-polyglot.md
+          - Code Generation:
+              - HumanEval: benchmarks/humaneval.md
+              - MBPP: benchmarks/mbpp.md
+          - Math & Reasoning:
+              - GSM8K: benchmarks/gsm8k.md
+              - MATH: benchmarks/math.md
+              - BigBench-Hard: benchmarks/bigbench-hard.md
+          - Knowledge & QA:
+              - TruthfulQA: benchmarks/truthfulqa.md
+              - HellaSwag: benchmarks/hellaswag.md
+              - ARC: benchmarks/arc.md
+              - GAIA: benchmarks/gaia.md
+          - Tool Use & Agents:
+              - MCPToolBench++: benchmarks/mcptoolbench.md
+              - ToolBench: benchmarks/toolbench.md
+              - AgentBench: benchmarks/agentbench.md
+              - WebArena: benchmarks/webarena.md
+              - TerminalBench: benchmarks/terminalbench.md
+              - InterCode: benchmarks/intercode.md
+          - ML Research:
+              - MLAgentBench: benchmarks/mlagentbench.md
+          - Code Understanding:
+              - RepoQA: benchmarks/repoqa.md
+          - Security:
+              - CyberGym: benchmarks/cybergym.md
       - MCP Integration: mcp-integration.md
       - Evaluation Results: evaluation-results.md
       - Claude Code Plugin: claude-code-plugin.md

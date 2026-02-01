@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **21 new benchmark implementations** (#6, #7, #18, #19, #20, #22, #24, #25, #26, #27, #28, #33, #34, #35, #37, #38, #40, #45, #46, #49): Initial stub implementations for all planned benchmarks
+
+### Documentation
+
+- **Comprehensive benchmark documentation** with individual tutorial pages for all 25+ benchmarks
+  - Each benchmark has a dedicated page with overview, task structure, CLI/YAML usage, evaluation methodology, examples, troubleshooting, and best practices
+  - Benchmarks organized by category: Software Engineering, Code Generation, Math & Reasoning, Knowledge & QA, Tool Use & Agents, ML Research, Code Understanding, Security
+  - New benchmarks overview page with master comparison table and category navigation
+  - HowTo JSON-LD structured data for SEO on benchmark pages
+  - Updated README with complete benchmark category table
+  - Fixed internal links across FAQ, configuration, CLI, and best practices docs
   - **Code generation**: MBPP, APPS, CodeContests, BigCodeBench, LeetCode, CoderEval
   - **Math/reasoning**: MATH, BigBench-Hard
   - **Knowledge/QA**: TruthfulQA, HellaSwag, ARC

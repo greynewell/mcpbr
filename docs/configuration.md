@@ -255,7 +255,7 @@ See [Installation](installation.md#supported-models) for the full list of suppor
     - **SWE-bench**: Bug fixing in Python repositories, evaluated with test suites
     - **CyberGym**: Security exploit generation in C/C++ projects, evaluated by crash detection
 
-    See the [Benchmarks guide](benchmarks.md) for detailed information.
+    See the [Benchmarks guide](benchmarks/index.md) for detailed information.
 
 !!! tip "CLI Override"
     Override the benchmark at runtime:

@@ -56,59 +56,37 @@ mcpbr runs controlled experiments: same model, same tasks, same environment - th
 
 ## Supported Benchmarks
 
-mcpbr supports multiple software engineering benchmarks through a flexible abstraction layer:
+mcpbr supports 25+ benchmarks across 8 categories through a flexible abstraction layer:
 
-### SWE-bench (Default)
-Real GitHub issues requiring bug fixes and patches. The agent generates unified diffs evaluated by running pytest test suites.
+| Category | Benchmarks |
+|----------|-----------|
+| **Software Engineering** | [SWE-bench](https://greynewell.github.io/mcpbr/benchmarks/swe-bench/) (Verified/Lite/Full), [APPS](https://greynewell.github.io/mcpbr/benchmarks/apps/), [CodeContests](https://greynewell.github.io/mcpbr/benchmarks/codecontests/), [BigCodeBench](https://greynewell.github.io/mcpbr/benchmarks/bigcodebench/), [LeetCode](https://greynewell.github.io/mcpbr/benchmarks/leetcode/), [CoderEval](https://greynewell.github.io/mcpbr/benchmarks/codereval/), [Aider Polyglot](https://greynewell.github.io/mcpbr/benchmarks/aider-polyglot/) |
+| **Code Generation** | [HumanEval](https://greynewell.github.io/mcpbr/benchmarks/humaneval/), [MBPP](https://greynewell.github.io/mcpbr/benchmarks/mbpp/) |
+| **Math & Reasoning** | [GSM8K](https://greynewell.github.io/mcpbr/benchmarks/gsm8k/), [MATH](https://greynewell.github.io/mcpbr/benchmarks/math/), [BigBench-Hard](https://greynewell.github.io/mcpbr/benchmarks/bigbench-hard/) |
+| **Knowledge & QA** | [TruthfulQA](https://greynewell.github.io/mcpbr/benchmarks/truthfulqa/), [HellaSwag](https://greynewell.github.io/mcpbr/benchmarks/hellaswag/), [ARC](https://greynewell.github.io/mcpbr/benchmarks/arc/), [GAIA](https://greynewell.github.io/mcpbr/benchmarks/gaia/) |
+| **Tool Use & Agents** | [MCPToolBench++](https://greynewell.github.io/mcpbr/benchmarks/mcptoolbench/), [ToolBench](https://greynewell.github.io/mcpbr/benchmarks/toolbench/), [AgentBench](https://greynewell.github.io/mcpbr/benchmarks/agentbench/), [WebArena](https://greynewell.github.io/mcpbr/benchmarks/webarena/), [TerminalBench](https://greynewell.github.io/mcpbr/benchmarks/terminalbench/), [InterCode](https://greynewell.github.io/mcpbr/benchmarks/intercode/) |
+| **ML Research** | [MLAgentBench](https://greynewell.github.io/mcpbr/benchmarks/mlagentbench/) |
+| **Code Understanding** | [RepoQA](https://greynewell.github.io/mcpbr/benchmarks/repoqa/) |
+| **Security** | [CyberGym](https://greynewell.github.io/mcpbr/benchmarks/cybergym/) |
 
-- **Task**: Generate patches to fix bugs
-- **Evaluation**: Test suite pass/fail
-- **Pre-built images**: Available for most tasks
+### Featured Benchmarks
 
-**Variants:**
-- **swe-bench-verified** (default) - Manually validated test cases for higher quality evaluation ([SWE-bench/SWE-bench_Verified](https://huggingface.co/datasets/SWE-bench/SWE-bench_Verified))
-- **swe-bench-lite** - 300 tasks, quick testing ([SWE-bench/SWE-bench_Lite](https://huggingface.co/datasets/SWE-bench/SWE-bench_Lite))
-- **swe-bench-full** - 2,294 tasks, complete benchmark ([SWE-bench/SWE-bench](https://huggingface.co/datasets/SWE-bench/SWE-bench))
+**SWE-bench** (Default) - Real GitHub issues requiring bug fixes. Three variants: Verified (500 manually validated), Lite (300 curated), and Full (2,294 complete). Pre-built Docker images available.
 
-### CyberGym
-Security vulnerabilities requiring Proof-of-Concept (PoC) exploits. The agent generates exploits that trigger crashes in vulnerable code.
+**CyberGym** - Security vulnerabilities requiring PoC exploits. 4 difficulty levels controlling context. Uses AddressSanitizer for crash detection.
 
-- **Dataset**: [sunblaze-ucb/cybergym](https://huggingface.co/datasets/sunblaze-ucb/cybergym)
-- **Task**: Generate PoC exploits
-- **Evaluation**: PoC crashes pre-patch, doesn't crash post-patch
-- **Difficulty levels**: 0-3 (controls context given to agent)
-- **Learn more**: [CyberGym Project](https://cybergym.cs.berkeley.edu/)
+**MCPToolBench++** - Large-scale MCP tool use evaluation across 45+ categories. Tests tool discovery, selection, invocation, and result interpretation.
 
-### MCPToolBench++
-Large-scale MCP tool use evaluation across 45+ categories. Tests agent capabilities in tool discovery, selection, invocation, and result interpretation.
-
-- **Dataset**: [MCPToolBench/MCPToolBenchPP](https://huggingface.co/datasets/MCPToolBench/MCPToolBenchPP)
-- **Task**: Complete tasks using appropriate MCP tools
-- **Evaluation**: Tool selection accuracy, parameter correctness, sequence matching
-- **Categories**: Browser, Finance, Code Analysis, and 40+ more
-- **Learn more**: [MCPToolBench++ Paper](https://arxiv.org/pdf/2508.07575) | [GitHub](https://github.com/mcp-tool-bench/MCPToolBenchPP)
-
-### GSM8K
-Grade-school math word problems testing mathematical reasoning and chain-of-thought capabilities.
-
-- **Dataset**: [openai/gsm8k](https://huggingface.co/datasets/openai/gsm8k)
-- **Task**: Solve math word problems with step-by-step reasoning
-- **Evaluation**: Numeric answer correctness with tolerance
-- **Problem Types**: Multi-step arithmetic and basic algebra
-- **Learn more**: [GSM8K Paper](https://arxiv.org/abs/2110.14168) | [GitHub](https://github.com/openai/grade-school-math)
+**GSM8K** - Grade-school math word problems testing chain-of-thought reasoning with numeric answer matching.
 
 ```bash
-# Run SWE-bench Verified (default - manually validated tests)
+# Run SWE-bench Verified (default)
 mcpbr run -c config.yaml
 
-# Run SWE-bench Lite (300 tasks, quick testing)
-mcpbr run -c config.yaml -b swe-bench-lite
-
-# Run SWE-bench Full (2,294 tasks, complete benchmark)
-mcpbr run -c config.yaml -b swe-bench-full
-
-# Run GSM8K
+# Run any benchmark
+mcpbr run -c config.yaml --benchmark humaneval -n 20
 mcpbr run -c config.yaml --benchmark gsm8k -n 50
+mcpbr run -c config.yaml --benchmark cybergym --level 2
 
 # List all available benchmarks
 mcpbr benchmarks
@@ -1265,12 +1243,18 @@ mcpbr/
 │   ├── models.py        # Supported model registry
 │   ├── providers.py     # LLM provider abstractions (extensible)
 │   ├── harnesses.py     # Agent harness implementations (extensible)
-│   ├── benchmarks/      # Benchmark abstraction layer
+│   ├── benchmarks/      # Benchmark abstraction layer (25+ benchmarks)
 │   │   ├── __init__.py      # Registry and factory
 │   │   ├── base.py          # Benchmark protocol
-│   │   ├── swebench.py      # SWE-bench implementation
-│   │   ├── cybergym.py      # CyberGym implementation
-│   │   └── mcptoolbench.py  # MCPToolBench++ implementation
+│   │   ├── swebench.py      # SWE-bench (Verified/Lite/Full)
+│   │   ├── cybergym.py      # CyberGym security
+│   │   ├── humaneval.py     # HumanEval code generation
+│   │   ├── gsm8k.py         # GSM8K math reasoning
+│   │   ├── mcptoolbench.py  # MCPToolBench++ tool use
+│   │   ├── apps.py          # APPS coding problems
+│   │   ├── mbpp.py          # MBPP Python problems
+│   │   ├── math_benchmark.py # MATH competition math
+│   │   └── ...              # 15+ more benchmarks
 │   ├── harness.py       # Main orchestrator
 │   ├── agent.py         # Baseline agent implementation
 │   ├── docker_env.py    # Docker environment management + in-container execution

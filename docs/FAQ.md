@@ -228,7 +228,7 @@ mcpbr supports two benchmarks:
 
 Run `mcpbr benchmarks` to list available benchmarks.
 
-See [Benchmarks Guide](benchmarks.md).
+See [Benchmarks Guide](benchmarks/index.md).
 
 ### How do I choose between SWE-bench and CyberGym?
 
@@ -243,7 +243,7 @@ mcpbr run -c config.yaml
 mcpbr run -c config.yaml --benchmark cybergym --level 2
 ```
 
-See [Comparing Benchmarks](benchmarks.md#comparing-benchmarks).
+See [Comparing Benchmarks](benchmarks/index.md#comparing-benchmarks).
 
 ### What are CyberGym difficulty levels?
 
@@ -258,7 +258,7 @@ CyberGym supports 4 difficulty levels (0-3) that control context given to the ag
 mcpbr run -c config.yaml --benchmark cybergym --level 2
 ```
 
-See [Difficulty Levels](benchmarks.md#difficulty-levels).
+See [Difficulty Levels](benchmarks/cybergym.md#difficulty-levels).
 
 ### How many tasks should I run?
 

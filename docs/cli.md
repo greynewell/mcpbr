@@ -378,7 +378,7 @@ Use --benchmark flag with 'run' command to select a benchmark
 Example: mcpbr run -c config.yaml --benchmark cybergym --level 2
 ```
 
-See the [Benchmarks guide](benchmarks.md) for detailed information about each benchmark.
+See the [Benchmarks guide](benchmarks/index.md) for detailed information about each benchmark.
 
 ---
 

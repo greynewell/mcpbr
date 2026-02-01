@@ -162,14 +162,14 @@ class LeetCodeBenchmark:
     async def evaluate(
         self,
         env: TaskEnvironment,
-        task: dict[str, Any],
+        _task: dict[str, Any],
         solution: str,
     ) -> dict[str, Any]:
         """Evaluate a solution for LeetCode task.
 
         Args:
             env: Task environment.
-            task: LeetCode task dictionary.
+            _task: LeetCode task dictionary (unused; no structured test cases).
             solution: Solution code to evaluate.
 
         Returns:

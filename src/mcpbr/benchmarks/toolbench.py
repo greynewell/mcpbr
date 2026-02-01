@@ -23,7 +23,7 @@ class ToolBenchBenchmark:
 
     name = "toolbench"
 
-    def __init__(self, dataset: str = "tuandunghcmut/toolbench-v1"):
+    def __init__(self, dataset: str = "tuandunghcmut/toolbench-v1") -> None:
         """Initialize ToolBench benchmark.
 
         Args:
@@ -216,7 +216,7 @@ class ToolBenchBenchmark:
         try:
             calls = json.loads(solution)
             if isinstance(calls, list):
-                return calls
+                return [c for c in calls if isinstance(c, dict)]
             if isinstance(calls, dict):
                 return [calls]
         except (json.JSONDecodeError, TypeError):

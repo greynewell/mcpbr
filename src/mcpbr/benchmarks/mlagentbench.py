@@ -1,7 +1,7 @@
 """MLAgentBench benchmark implementation."""
 
 import re
-from typing import Any
+from typing import Any, ClassVar
 
 from datasets import load_dataset
 
@@ -150,7 +150,14 @@ class MLAgentBenchBenchmark:
         return await docker_manager.create_environment(temp_task)
 
     # Metrics where lower values indicate better performance
-    _LOWER_IS_BETTER_METRICS = {"loss", "rmse", "mae", "mse", "error", "perplexity"}
+    _LOWER_IS_BETTER_METRICS: ClassVar[set[str]] = {
+        "loss",
+        "rmse",
+        "mae",
+        "mse",
+        "error",
+        "perplexity",
+    }
 
     async def evaluate(
         self,

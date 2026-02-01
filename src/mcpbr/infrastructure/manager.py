@@ -20,18 +20,31 @@ class InfrastructureManager:
         """Create an infrastructure provider based on configuration.
 
         Args:
-            config: Harness configuration object with infrastructure_mode attribute.
+            config: Harness configuration object with infrastructure attribute.
 
         Returns:
             Infrastructure provider instance.
 
         Raises:
             ValueError: If infrastructure mode is unknown.
+            NotImplementedError: If infrastructure mode is not yet implemented.
         """
-        mode = getattr(config, "infrastructure_mode", "local")
+        # Get infrastructure config (with backward compatibility)
+        infra_config = getattr(config, "infrastructure", None)
+        if infra_config is None:
+            # Backward compatibility: check for old infrastructure_mode attribute
+            mode = getattr(config, "infrastructure_mode", "local")
+        else:
+            mode = infra_config.mode
 
         if mode == "local":
             return LocalProvider()
+        elif mode == "azure":
+            # Azure provider will be implemented in Phase 3
+            raise NotImplementedError(
+                "Azure provider not yet implemented. "
+                "This will be available in Phase 3 of the Azure infrastructure integration."
+            )
         else:
             raise ValueError(f"Unknown infrastructure mode: {mode}")
 

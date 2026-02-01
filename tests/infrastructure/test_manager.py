@@ -16,7 +16,9 @@ class TestInfrastructureManager:
     def test_create_provider_with_local_mode(self) -> None:
         """Test creating a LocalProvider with mode='local'."""
         mock_config = MagicMock()
-        mock_config.infrastructure_mode = "local"
+        mock_infra = MagicMock()
+        mock_infra.mode = "local"
+        mock_config.infrastructure = mock_infra
 
         provider = InfrastructureManager.create_provider(mock_config)
 
@@ -26,24 +28,41 @@ class TestInfrastructureManager:
     def test_create_provider_raises_error_for_unknown_mode(self) -> None:
         """Test that create_provider() raises error for unknown mode."""
         mock_config = MagicMock()
-        mock_config.infrastructure_mode = "unknown_mode"
+        mock_infra = MagicMock()
+        mock_infra.mode = "unknown_mode"
+        mock_config.infrastructure = mock_infra
 
         with pytest.raises(ValueError, match="Unknown infrastructure mode: unknown_mode"):
             InfrastructureManager.create_provider(mock_config)
 
     def test_create_provider_raises_error_for_azure_mode(self) -> None:
-        """Test that create_provider() raises error for azure mode (not yet implemented)."""
+        """Test that create_provider() raises NotImplementedError for azure mode."""
         mock_config = MagicMock()
-        mock_config.infrastructure_mode = "azure"
+        mock_infra = MagicMock()
+        mock_infra.mode = "azure"
+        mock_config.infrastructure = mock_infra
 
-        with pytest.raises(ValueError, match="Unknown infrastructure mode: azure"):
+        with pytest.raises(NotImplementedError, match="Azure provider not yet implemented"):
             InfrastructureManager.create_provider(mock_config)
 
     def test_create_provider_default_mode(self) -> None:
         """Test that create_provider() defaults to local when mode not specified."""
         mock_config = MagicMock()
-        # Simulate missing attribute by raising AttributeError
-        mock_config.infrastructure_mode = "local"
+        mock_infra = MagicMock()
+        mock_infra.mode = "local"
+        mock_config.infrastructure = mock_infra
+
+        provider = InfrastructureManager.create_provider(mock_config)
+
+        assert isinstance(provider, LocalProvider)
+
+    def test_create_provider_backward_compatibility(self) -> None:
+        """Test backward compatibility with old infrastructure_mode attribute."""
+        mock_config = MagicMock()
+        mock_config.infrastructure = None
+        mock_infra = MagicMock()
+        mock_infra.mode = "local"
+        mock_config.infrastructure = mock_infra
 
         provider = InfrastructureManager.create_provider(mock_config)
 
@@ -53,7 +72,9 @@ class TestInfrastructureManager:
     async def test_run_with_infrastructure_lifecycle(self) -> None:
         """Test run_with_infrastructure() executes full lifecycle."""
         mock_config = MagicMock()
-        mock_config.infrastructure_mode = "local"
+        mock_infra = MagicMock()
+        mock_infra.mode = "local"
+        mock_config.infrastructure = mock_infra
         mock_config_path = Path("/fake/config.yaml")
 
         # Track the order of calls
@@ -103,7 +124,9 @@ class TestInfrastructureManager:
     async def test_run_with_infrastructure_passes_parameters(self) -> None:
         """Test that run_with_infrastructure() passes all parameters correctly."""
         mock_config = MagicMock()
-        mock_config.infrastructure_mode = "local"
+        mock_infra = MagicMock()
+        mock_infra.mode = "local"
+        mock_config.infrastructure = mock_infra
         mock_config_path = Path("/fake/config.yaml")
 
         mock_provider = AsyncMock(spec=InfrastructureProvider)
@@ -145,7 +168,9 @@ class TestInfrastructureManager:
     async def test_run_with_infrastructure_cleanup_on_error(self) -> None:
         """Test that cleanup is called even when evaluation fails."""
         mock_config = MagicMock()
-        mock_config.infrastructure_mode = "local"
+        mock_infra = MagicMock()
+        mock_infra.mode = "local"
+        mock_config.infrastructure = mock_infra
         mock_config_path = Path("/fake/config.yaml")
 
         mock_provider = AsyncMock(spec=InfrastructureProvider)
@@ -175,7 +200,9 @@ class TestInfrastructureManager:
     async def test_run_with_infrastructure_fails_on_unhealthy(self) -> None:
         """Test that run_with_infrastructure() fails if health check fails."""
         mock_config = MagicMock()
-        mock_config.infrastructure_mode = "local"
+        mock_infra = MagicMock()
+        mock_infra.mode = "local"
+        mock_config.infrastructure = mock_infra
         mock_config_path = Path("/fake/config.yaml")
 
         mock_provider = AsyncMock(spec=InfrastructureProvider)
@@ -205,7 +232,9 @@ class TestInfrastructureManager:
     async def test_run_with_infrastructure_skips_artifacts_if_no_output_dir(self) -> None:
         """Test that artifact collection is skipped if output_dir is None."""
         mock_config = MagicMock()
-        mock_config.infrastructure_mode = "local"
+        mock_infra = MagicMock()
+        mock_infra.mode = "local"
+        mock_config.infrastructure = mock_infra
         mock_config_path = Path("/fake/config.yaml")
 
         mock_provider = AsyncMock(spec=InfrastructureProvider)

@@ -22,6 +22,26 @@ VALID_BENCHMARKS = (
     "gsm8k",
     "humaneval",
     "mcptoolbench",
+    "mbpp",
+    "math",
+    "truthfulqa",
+    "bigbench-hard",
+    "hellaswag",
+    "arc",
+    "apps",
+    "codecontests",
+    "bigcodebench",
+    "leetcode",
+    "codereval",
+    "repoqa",
+    "toolbench",
+    "aider-polyglot",
+    "terminalbench",
+    "gaia",
+    "agentbench",
+    "webarena",
+    "mlagentbench",
+    "intercode",
 )
 VALID_INFRASTRUCTURE_MODES = ("local", "azure")
 
@@ -277,7 +297,7 @@ class HarnessConfig(BaseModel):
 
     benchmark: str = Field(
         default="swe-bench-verified",
-        description="Benchmark to run (swe-bench-lite, swe-bench-verified, swe-bench-full, cybergym, gsm8k, humaneval, mcptoolbench)",
+        description="Benchmark to run (use `mcpbr benchmarks` for the full list).",
     )
 
     cybergym_level: int = Field(

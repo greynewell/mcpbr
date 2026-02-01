@@ -25,6 +25,39 @@
   </script>
   {% endif %}
 
+  {# HowTo JSON-LD Structured Data for Benchmark Pages #}
+  {% if page and page.meta and page.meta.benchmark_howto %}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    "name": "{{ page.meta.benchmark_howto.name | e }}",
+    "description": "{{ page.meta.benchmark_howto.description | e }}",
+    "tool": {
+      "@type": "SoftwareApplication",
+      "name": "mcpbr"
+    },
+    "step": [
+      {
+        "@type": "HowToStep",
+        "name": "Install mcpbr",
+        "text": "Install mcpbr with pip install mcpbr"
+      },
+      {
+        "@type": "HowToStep",
+        "name": "Configure benchmark",
+        "text": "Set benchmark: {{ page.meta.benchmark_howto.benchmark_id | e }} in your YAML config"
+      },
+      {
+        "@type": "HowToStep",
+        "name": "Run evaluation",
+        "text": "Execute mcpbr run -c config.yaml --benchmark {{ page.meta.benchmark_howto.benchmark_id | e }}"
+      }
+    ]
+  }
+  </script>
+  {% endif %}
+
   {# Software Application Structured Data for Home Page #}
   {% if page and (page.is_homepage or page.url == '.' or page.url == '') %}
   <script type="application/ld+json">

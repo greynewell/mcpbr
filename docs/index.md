@@ -169,7 +169,7 @@ Host Machine
 - [Configuration](configuration.md) - Full configuration reference
 - [CLI Reference](cli.md) - All available commands and options
 - [MCP Integration](mcp-integration.md) - How to test your MCP server
-- [Benchmarks](benchmarks.md) - Available benchmarks and how to use them
+- [Benchmarks](benchmarks/index.md) - Available benchmarks and how to use them
 - [Evaluation Results](evaluation-results.md) - Understanding output formats
 - [Troubleshooting](troubleshooting.md) - Common issues and solutions
 

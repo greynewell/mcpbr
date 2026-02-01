@@ -1224,7 +1224,7 @@ mcpbr run -c config-b.yaml -n 10  # Different random 10
 - [Configuration Guide](configuration.md) - Detailed configuration reference
 - [Troubleshooting](troubleshooting.md) - Common issues and solutions
 - [CLI Reference](cli.md) - All command options
-- [Benchmarks Guide](benchmarks.md) - Benchmark details
+- [Benchmarks Guide](benchmarks/index.md) - Benchmark details
 - [Evaluation Results](evaluation-results.md) - Understanding output
 - [Templates](templates.md) - Configuration templates
 - [MCP Integration](mcp-integration.md) - MCP server testing

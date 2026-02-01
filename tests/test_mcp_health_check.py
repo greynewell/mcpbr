@@ -1,5 +1,6 @@
 """Tests for MCP server health check functionality."""
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -43,8 +44,8 @@ class TestMCPPreflightCheck:
         self, temp_config_file: Path, valid_mcp_config: dict
     ) -> None:
         """Test that health check passes when command exists."""
-        # Use a command that definitely exists on all systems
-        valid_mcp_config["mcp_server"]["command"] = "python"
+        # Use the current Python executable which definitely exists
+        valid_mcp_config["mcp_server"]["command"] = sys.executable
         temp_config_file.write_text(yaml.dump(valid_mcp_config))
 
         success, error_msg = await run_mcp_preflight_check(temp_config_file, silent=True)
@@ -112,7 +113,7 @@ class TestMCPPreflightCheck:
         self, temp_config_file: Path, valid_mcp_config: dict
     ) -> None:
         """Test that silent mode produces no console output."""
-        valid_mcp_config["mcp_server"]["command"] = "python"
+        valid_mcp_config["mcp_server"]["command"] = sys.executable
         temp_config_file.write_text(yaml.dump(valid_mcp_config))
 
         # Silent mode should produce no output (Rich console writes to stderr)
@@ -145,7 +146,7 @@ class TestMCPPreflightCheck:
         self, temp_config_file: Path, valid_mcp_config: dict
     ) -> None:
         """Test health check with complex command arguments."""
-        valid_mcp_config["mcp_server"]["command"] = "python"
+        valid_mcp_config["mcp_server"]["command"] = sys.executable
         valid_mcp_config["mcp_server"]["args"] = [
             "-m",
             "http.server",

@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Side-by-Side MCP Server Comparison** (#350): A/B test two MCP servers in a single evaluation run
+  - New `comparison_mode` flag enables dual-server evaluation
+  - Configure servers with `mcp_server_a` and `mcp_server_b` fields
+  - Results show side-by-side comparison with delta metrics and improvement percentages
+  - Per-task comparison showing which server won each task
+  - Unique wins analysis (tasks where only one server succeeded)
+  - Full backward compatibility with single-server mode
+  - Comprehensive documentation in `docs/comparison-mode.md`
+- **GSM8K Benchmark** (#306): Math reasoning evaluation support
+  - Evaluate LLM math reasoning on Grade School Math 8K dataset
+  - 1,319 test problems covering arithmetic, algebra, and multi-step reasoning
+  - Automatic answer extraction from multiple formats (GSM8K, LaTeX, natural language)
+  - Configurable tolerance for numeric comparison
+  - Chain-of-thought prompting support
+  - Comprehensive documentation in `docs/benchmarks.md`
+
+### Fixed
+
+- **Docker Environment Robustness** (#337, #339, #342, #341): Multiple improvements to Docker-based evaluation
+  - Git installation: Automatically install git in containers that don't have it (#337)
+  - Fallback images: Handle missing pre-built images gracefully with build-from-scratch fallback (#339)
+  - Retry logic: Retry Docker operations on transient failures with exponential backoff (#342)
+  - Cleanup: Ensure temp files are cleaned up on all exit paths (#341)
+- **Error Handling** (#343, #344): Improved error messages and resilience
+  - Parse errors: Better handling of malformed JSON responses from agents (#343)
+  - Error messages: More detailed error context including log paths and suggestions (#344)
+- **Health Check Tests**: Fixed 3 failing tests by using `sys.executable` instead of `python` command
+  - Issue: `python` command doesn't exist on many modern systems (only `python3`)
+  - Tests now use the actual Python interpreter being used by pytest
+- **Comparison Mode Integration**: Fixed state tracker and preflight checks for comparison mode
+  - State tracker now computes correct config hash when using mcp_server_a/b
+  - Preflight checks now validate both servers in comparison mode
+  - Fixes AttributeError when running side-by-side evaluations
+
 ### Infrastructure
 
 - Refactored release workflow to auto-bump version after GitHub UI release

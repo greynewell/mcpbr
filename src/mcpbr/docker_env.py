@@ -425,6 +425,7 @@ CMD ["/bin/bash"]
                 img.tag(self.FALLBACK_IMAGE)
             except Exception as tag_error:
                 logger.error(f"Failed to create fallback image {self.FALLBACK_IMAGE}: {tag_error}")
+                raise
 
     async def create_environment(
         self,

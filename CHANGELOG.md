@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-02-01
+
+### Added
+
+- **Azure Infrastructure Provider** (#351, #356): Run evaluations on Azure VMs instead of local Docker
+  - Automatic VM provisioning with configurable CPU, memory, and disk
+  - SSH connectivity with key management
+  - Remote dependency installation (Docker, Python, mcpbr)
+  - Configuration transfer and environment variable export
+  - Test task validation before full evaluation
+  - Artifact collection with ZIP archiving
+  - Auto-cleanup with configurable preservation on error
+  - Comprehensive health checks (Azure CLI, authentication, quotas)
+  - Abstract `InfrastructureProvider` base class for future providers
+  - `InfrastructureManager` factory with full lifecycle orchestration
+  - Custom exceptions (`UnknownInfrastructureModeError`, `InfrastructureHealthCheckError`)
+  - New config fields: `infrastructure.mode` (`local`/`azure`), `infrastructure.azure.*`
+  - Full backward compatibility when `infrastructure` field is omitted
+
 ### Fixed
 
 - **Django test runner support** (#93): Detect Django test format and use `./tests/runtests.py` instead of pytest
@@ -639,6 +658,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--no-prebuilt` CLI flag to disable pre-built images and build from scratch
 - Network access for containers to enable API calls from within Docker
 
+[0.4.4]: https://github.com/greynewell/mcpbr/releases/tag/v0.4.4
 [0.4.3]: https://github.com/greynewell/mcpbr/releases/tag/v0.4.3
 [0.4.2]: https://github.com/greynewell/mcpbr/releases/tag/v0.4.2
 [0.4.1]: https://github.com/greynewell/mcpbr/releases/tag/v0.4.1

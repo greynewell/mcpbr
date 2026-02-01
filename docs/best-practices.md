@@ -1,4 +1,5 @@
 ---
+description: "Best practices for running mcpbr evaluations including cost optimization, sample sizing, MCP server configuration, and result interpretation."
 faq:
   - q: "What are the best practices for running mcpbr evaluations?"
     a: "Start with small sample sizes (n=5-10) to validate your setup, use templates for common scenarios, monitor costs by tracking token usage, and save results to compare different configurations. Always test your MCP server standalone before benchmarking."

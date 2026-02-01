@@ -1,3 +1,7 @@
+---
+description: "Frequently asked questions about mcpbr, the MCP server benchmark runner. Covers setup, benchmarks, configuration, results, and troubleshooting."
+---
+
 # Frequently Asked Questions (FAQ)
 
 Quick answers to common questions about mcpbr. For detailed information, follow the links to the full documentation.

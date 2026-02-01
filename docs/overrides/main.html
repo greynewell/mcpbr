@@ -3,6 +3,33 @@
 {% block extrahead %}
   {{ super() }}
 
+  {# Open Graph Meta Tags #}
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="mcpbr Documentation" />
+  <meta property="og:title" content="{{ page.title }} - mcpbr Documentation" />
+  <meta property="og:url" content="{{ page.canonical_url }}" />
+  {% if page and page.meta and page.meta.description %}
+  <meta property="og:description" content="{{ page.meta.description | e }}" />
+  {% else %}
+  <meta property="og:description" content="{{ config.site_description | e }}" />
+  {% endif %}
+  <meta property="og:image" content="https://greynewell.github.io/mcpbr/assets/mcpbr-logo.jpg" />
+
+  {# Twitter Card Meta Tags #}
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="{{ page.title }} - mcpbr Documentation" />
+  {% if page and page.meta and page.meta.description %}
+  <meta name="twitter:description" content="{{ page.meta.description | e }}" />
+  {% else %}
+  <meta name="twitter:description" content="{{ config.site_description | e }}" />
+  {% endif %}
+  <meta name="twitter:image" content="https://greynewell.github.io/mcpbr/assets/mcpbr-logo.jpg" />
+
+  {# Per-Page Meta Description from Frontmatter #}
+  {% if page and page.meta and page.meta.description %}
+  <meta name="description" content="{{ page.meta.description | e }}" />
+  {% endif %}
+
   {# FAQ JSON-LD Structured Data #}
   {% if page and page.meta and page.meta.faq %}
   <script type="application/ld+json">
@@ -67,12 +94,17 @@
     "name": "mcpbr",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Linux, macOS, Windows",
-    "description": "Model Context Protocol Benchmark Runner - evaluate MCP servers against SWE-bench tasks",
+    "description": "Model Context Protocol Benchmark Runner - evaluate AI agents and MCP servers across 25+ benchmarks including SWE-bench, HumanEval, GSM8K, CyberGym, and more",
     "url": "https://greynewell.github.io/mcpbr/",
     "downloadUrl": "https://pypi.org/project/mcpbr/",
-    "softwareVersion": "0.1.0",
+    "softwareVersion": "0.4.5",
     "license": "https://opensource.org/licenses/MIT",
-    "programmingLanguage": "Python"
+    "programmingLanguage": "Python",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
   }
   </script>
   {% endif %}

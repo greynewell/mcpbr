@@ -1,4 +1,5 @@
 ---
+description: "Configure mcpbr with YAML files to define MCP server settings, benchmark selection, model parameters, and evaluation options."
 faq:
   - q: "How do I configure mcpbr to use my MCP server?"
     a: "Configure the mcp_server section in your YAML config file with the command to start your server, args (using {workdir} as placeholder for the task repository path), and any required environment variables."

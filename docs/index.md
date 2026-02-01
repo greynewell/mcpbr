@@ -1,7 +1,8 @@
 ---
+description: "mcpbr is an open-source benchmark runner for evaluating AI agents and MCP servers across 25+ benchmarks including SWE-bench, HumanEval, GSM8K, CyberGym, and more."
 faq:
   - q: "What is mcpbr?"
-    a: "mcpbr (Model Context Protocol Benchmark Runner) is a tool for evaluating MCP servers against real GitHub issues from the SWE-bench dataset, providing quantitative comparison between tool-assisted and baseline agent performance."
+    a: "mcpbr (Model Context Protocol Benchmark Runner) is an open-source tool for evaluating AI agents and MCP servers across 25+ benchmarks including SWE-bench, HumanEval, GSM8K, CyberGym, MCPToolBench++, and more. It provides quantitative comparison between tool-assisted and baseline agent performance."
   - q: "What models does mcpbr support?"
     a: "mcpbr supports Claude models from Anthropic including Claude Opus 4.5, Claude Sonnet 4.5, and Claude Haiku 4.5. Run 'mcpbr models' to see the full list."
   - q: "How do I get started with mcpbr?"

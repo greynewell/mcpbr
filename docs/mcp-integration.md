@@ -1,4 +1,5 @@
 ---
+description: "Guide to integrating and testing MCP servers with mcpbr, including configuration, environment variables, and common server setups."
 faq:
   - q: "How do I test my MCP server with mcpbr?"
     a: "Configure your MCP server in mcpbr.yaml by specifying the command, args (using {workdir} for the repository path), and any required environment variables. Then run 'mcpbr run -c mcpbr.yaml' to benchmark it against SWE-bench tasks."

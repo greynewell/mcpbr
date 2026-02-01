@@ -1,4 +1,5 @@
 ---
+description: "Understanding mcpbr evaluation results including resolution rates, JSON/YAML output formats, Markdown reports, and result comparison."
 faq:
   - q: "How do I interpret mcpbr evaluation results?"
     a: "mcpbr reports resolution rates for MCP and baseline agents, where 'resolved' means the generated patch passes all required tests. The improvement percentage shows how much better the MCP agent performed relative to the baseline."

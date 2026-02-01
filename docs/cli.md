@@ -1,4 +1,5 @@
 ---
+description: "mcpbr CLI reference with all commands, options, and examples for running benchmarks, managing configs, and cleaning up resources."
 faq:
   - q: "What commands are available in mcpbr?"
     a: "mcpbr provides six commands: run (execute evaluations), init (generate config), models (list supported models), providers (list LLM providers), harnesses (list agent backends), benchmarks (list available benchmarks), and cleanup (remove orphaned Docker resources including containers, volumes, and networks)."

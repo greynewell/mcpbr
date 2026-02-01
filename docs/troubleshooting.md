@@ -1,4 +1,5 @@
 ---
+description: "Troubleshoot common mcpbr issues including Docker setup, API key errors, timeout problems, and evaluation failures."
 faq:
   - q: "Docker is not running - how do I fix this?"
     a: "Start Docker Desktop on macOS/Windows, or run 'sudo systemctl start docker' on Linux. Verify with 'docker info'."

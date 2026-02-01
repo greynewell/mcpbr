@@ -1,4 +1,5 @@
 ---
+description: "Install mcpbr to benchmark AI agents and MCP servers. Requires Python 3.11+, Docker, and an Anthropic API key."
 faq:
   - q: "What are the prerequisites for running mcpbr?"
     a: "You need Python 3.11+, Docker running, an ANTHROPIC_API_KEY environment variable, the Claude Code CLI installed, and network access for pulling Docker images and API calls."

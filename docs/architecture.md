@@ -1,4 +1,5 @@
 ---
+description: "mcpbr architecture overview covering the evaluation pipeline, Docker orchestration, benchmark abstraction, and agent harness design."
 faq:
   - q: "How does mcpbr work internally?"
     a: "mcpbr loads SWE-bench tasks from HuggingFace, creates Docker containers with pre-built environments for each task, runs Claude Code CLI inside the container with and without MCP tools, applies the generated patches, runs tests, and aggregates the results."

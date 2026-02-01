@@ -1,4 +1,5 @@
 ---
+description: "Contribute to mcpbr: development setup, coding standards, testing requirements, and pull request guidelines."
 faq:
   - q: "How do I contribute to mcpbr?"
     a: "Fork the repository, create a feature branch, make your changes with tests, ensure all tests pass, and submit a pull request. See the contribution guide for detailed steps."

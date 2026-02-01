@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **21 new benchmark implementations** (#6, #7, #18, #19, #20, #22, #24, #25, #26, #27, #28, #33, #34, #35, #37, #38, #40, #45, #46, #49): Initial stub implementations for all planned benchmarks
 
+### Fixed
+
+- **SEO improvements** for documentation site
+  - Added robots.txt with sitemap reference
+  - Added Open Graph and Twitter Card meta tags on all pages
+  - Added per-page meta descriptions from frontmatter across all doc pages
+  - Updated site description to reflect all 25+ benchmarks (was SWE-bench only)
+  - Fixed SoftwareApplication schema version (was 0.1.0, now 0.4.5)
+  - Updated SoftwareApplication schema description to cover full benchmark suite
+
 ### Documentation
 
 - **Comprehensive benchmark documentation** with individual tutorial pages for all 25+ benchmarks

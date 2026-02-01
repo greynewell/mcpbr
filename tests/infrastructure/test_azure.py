@@ -501,13 +501,18 @@ class TestCleanup:
 
 
 class TestSetup:
-    """Test full setup flow."""
+    """Test full setup flow (old tests from Phase 3 - simplified expectations)."""
 
     @patch("mcpbr.infrastructure.azure.subprocess.run")
     @patch("mcpbr.infrastructure.azure.paramiko.SSHClient")
     @patch("mcpbr.infrastructure.azure.time.time", return_value=1234567890)
-    async def test_setup_success(self, mock_time, mock_ssh_client, mock_run, azure_provider):
-        """Test full setup flow (create VM, wait SSH, get IP)."""
+    @patch("mcpbr.infrastructure.azure.os.environ.get")
+    async def test_setup_success(
+        self, mock_env_get, mock_time, mock_ssh_client, mock_run, azure_provider
+    ):
+        """Test full setup flow (create VM, wait SSH, get IP, install, config, test)."""
+        mock_env_get.return_value = "test-api-key"
+
         # Mock ssh-keygen, resource group show, vm create, vm show
         mock_run.side_effect = [
             Mock(returncode=0),  # ssh-keygen
@@ -518,6 +523,19 @@ class TestSetup:
 
         mock_client = MagicMock()
         mock_ssh_client.return_value = mock_client
+
+        # Mock SSH exec_command for all operations
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b"output\n"
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        # Mock SFTP for config transfer
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
 
         await azure_provider.setup()
 
@@ -545,10 +563,12 @@ class TestSetup:
 
     @patch("mcpbr.infrastructure.azure.subprocess.run")
     @patch("mcpbr.infrastructure.azure.paramiko.SSHClient")
+    @patch("mcpbr.infrastructure.azure.os.environ.get")
     async def test_setup_with_existing_ssh_key(
-        self, mock_ssh_client, mock_run, azure_provider, tmp_path
+        self, mock_env_get, mock_ssh_client, mock_run, azure_provider, tmp_path
     ):
         """Test setup with existing SSH key."""
+        mock_env_get.return_value = "test-api-key"
         ssh_key = tmp_path / "existing_key"
         ssh_key.touch()
         azure_provider.azure_config.ssh_key_path = ssh_key
@@ -562,6 +582,19 @@ class TestSetup:
         mock_client = MagicMock()
         mock_ssh_client.return_value = mock_client
 
+        # Mock SSH exec_command for all operations
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b"output\n"
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        # Mock SFTP for config transfer
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
         await azure_provider.setup()
 
         # Verify ssh-keygen was NOT called
@@ -569,8 +602,13 @@ class TestSetup:
 
     @patch("mcpbr.infrastructure.azure.subprocess.run")
     @patch("mcpbr.infrastructure.azure.paramiko.SSHClient")
-    async def test_setup_with_generated_ssh_key(self, mock_ssh_client, mock_run, azure_provider):
+    @patch("mcpbr.infrastructure.azure.os.environ.get")
+    async def test_setup_with_generated_ssh_key(
+        self, mock_env_get, mock_ssh_client, mock_run, azure_provider
+    ):
         """Test setup with generated SSH key."""
+        mock_env_get.return_value = "test-api-key"
+
         # No SSH key configured
         azure_provider.azure_config.ssh_key_path = None
 
@@ -583,6 +621,19 @@ class TestSetup:
 
         mock_client = MagicMock()
         mock_ssh_client.return_value = mock_client
+
+        # Mock SSH exec_command for all operations
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b"output\n"
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        # Mock SFTP for config transfer
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
 
         await azure_provider.setup()
 
@@ -627,6 +678,595 @@ class TestHealthCheck:
 
         assert result["healthy"] is False
         assert len(result["failures"]) > 0
+
+
+# ============================================================================
+# Environment Setup Tests
+# ============================================================================
+
+
+class TestEnvironmentSetup:
+    """Test environment setup on VM (dependency installation)."""
+
+    async def test_install_dependencies_success(self, azure_provider):
+        """Test successful dependency installation."""
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b"Dependencies installed\n"
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        await azure_provider._install_dependencies()
+
+        # Verify command was executed
+        mock_client.exec_command.assert_called_once()
+        cmd = mock_client.exec_command.call_args[0][0]
+        assert "apt-get update" in cmd
+        assert "docker" in cmd.lower()
+        assert "pip3 install mcpbr" in cmd
+
+    async def test_install_dependencies_handles_failures_gracefully(self, azure_provider):
+        """Test dependency installation handles apt-get failures gracefully."""
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b""
+        mock_stdout.channel.recv_exit_status.return_value = 1
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b"Some package failed\n"
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        # Should not raise - just log warning
+        await azure_provider._install_dependencies()
+
+        mock_client.exec_command.assert_called_once()
+
+    async def test_install_dependencies_installs_docker(self, azure_provider):
+        """Test dependency installation includes Docker."""
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b"output\n"
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        await azure_provider._install_dependencies()
+
+        cmd = mock_client.exec_command.call_args[0][0]
+        assert "get.docker.com" in cmd
+
+    async def test_install_dependencies_installs_python_version(self, azure_provider):
+        """Test dependency installation installs configured Python version."""
+        azure_provider.azure_config.python_version = "3.11"
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b"output\n"
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        await azure_provider._install_dependencies()
+
+        cmd = mock_client.exec_command.call_args[0][0]
+        assert "python3.11" in cmd
+
+    async def test_install_dependencies_installs_mcpbr(self, azure_provider):
+        """Test dependency installation installs mcpbr via pip."""
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b"output\n"
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        await azure_provider._install_dependencies()
+
+        cmd = mock_client.exec_command.call_args[0][0]
+        assert "pip3 install mcpbr" in cmd
+
+
+# ============================================================================
+# Configuration Transfer Tests
+# ============================================================================
+
+
+class TestConfigurationTransfer:
+    """Test configuration file transfer via SFTP."""
+
+    async def test_transfer_config_creates_temporary_yaml(self, azure_provider, tmp_path):
+        """Test config transfer creates temporary YAML file."""
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
+        await azure_provider._transfer_config()
+
+        # Verify SFTP operations
+        mock_client.open_sftp.assert_called_once()
+        mock_sftp.put.assert_called_once()
+        mock_sftp.close.assert_called_once()
+
+    async def test_transfer_config_uploads_via_sftp(self, azure_provider):
+        """Test config transfer uploads via SFTP."""
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
+        await azure_provider._transfer_config()
+
+        # Verify upload destination
+        call_args = mock_sftp.put.call_args
+        assert call_args[0][1] == "/home/azureuser/config.yaml"
+
+    async def test_transfer_config_handles_upload_failures(self, azure_provider):
+        """Test config transfer handles upload failures."""
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        mock_sftp = MagicMock()
+        mock_sftp.put.side_effect = Exception("Upload failed")
+        mock_client.open_sftp.return_value = mock_sftp
+
+        with pytest.raises(Exception, match="Upload failed"):
+            await azure_provider._transfer_config()
+
+        # Verify SFTP was closed despite error
+        mock_sftp.close.assert_called_once()
+
+
+# ============================================================================
+# Environment Variable Export Tests
+# ============================================================================
+
+
+class TestEnvironmentVariableExport:
+    """Test environment variable export to VM."""
+
+    @patch("mcpbr.infrastructure.azure.os.environ.get")
+    async def test_export_env_vars_exports_anthropic_api_key(self, mock_env_get, azure_provider):
+        """Test environment variable export includes ANTHROPIC_API_KEY."""
+        mock_env_get.return_value = "sk-test-key"
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b""
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        await azure_provider._export_env_vars()
+
+        # Verify environment variable was exported
+        calls = mock_client.exec_command.call_args_list
+        assert len(calls) >= 2  # .bashrc and .profile
+        for call in calls:
+            cmd = call[0][0]
+            if "ANTHROPIC_API_KEY" in cmd:
+                assert "sk-test-key" in cmd
+
+    @patch("mcpbr.infrastructure.azure.os.environ.get")
+    async def test_export_env_vars_exports_multiple_keys(self, mock_env_get, azure_provider):
+        """Test environment variable export handles multiple keys."""
+        azure_provider.azure_config.env_keys_to_export = ["KEY1", "KEY2", "KEY3"]
+
+        # Return default for Rich environment vars, custom values for our keys
+        def side_effect_fn(k, default=None):
+            custom_values = {"KEY1": "val1", "KEY2": "val2", "KEY3": "val3"}
+            if k in custom_values:
+                return custom_values[k]
+            return default
+
+        mock_env_get.side_effect = side_effect_fn
+
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b""
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        await azure_provider._export_env_vars()
+
+        # Verify all keys were exported
+        calls = mock_client.exec_command.call_args_list
+        all_commands = " ".join([call[0][0] for call in calls])
+        assert "KEY1" in all_commands
+        assert "KEY2" in all_commands
+        assert "KEY3" in all_commands
+
+    @patch("mcpbr.infrastructure.azure.os.environ.get")
+    async def test_export_env_vars_writes_to_bashrc_and_profile(self, mock_env_get, azure_provider):
+        """Test environment variable export writes to both .bashrc and .profile."""
+        mock_env_get.return_value = "test-value"
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b""
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        await azure_provider._export_env_vars()
+
+        # Verify writes to both files
+        calls = mock_client.exec_command.call_args_list
+        commands = [call[0][0] for call in calls]
+        assert any(".bashrc" in cmd for cmd in commands)
+        assert any(".profile" in cmd for cmd in commands)
+
+    @patch("mcpbr.infrastructure.azure.os.environ.get")
+    async def test_export_env_vars_handles_missing_env_vars_gracefully(
+        self, mock_env_get, azure_provider
+    ):
+        """Test environment variable export handles missing vars gracefully."""
+
+        # Return default for Rich environment vars, None for our keys
+        def side_effect_fn(k, default=None):
+            # Return defaults for system env vars used by Rich
+            return default
+
+        mock_env_get.side_effect = side_effect_fn
+
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b""
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        # Should not raise - just warn
+        await azure_provider._export_env_vars()
+
+        # No SSH commands should be executed if no env vars found
+        assert mock_client.exec_command.call_count == 0
+
+
+# ============================================================================
+# Test Task Validation Tests
+# ============================================================================
+
+
+class TestTaskValidation:
+    """Test single task validation to verify setup."""
+
+    async def test_run_test_task_executes_mcpbr_with_sample_size_1(self, azure_provider):
+        """Test task validation executes mcpbr with sample_size=1."""
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b"Test task passed\n"
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        await azure_provider._run_test_task()
+
+        # Verify command
+        mock_client.exec_command.assert_called_once()
+        cmd = mock_client.exec_command.call_args[0][0]
+        assert "mcpbr run" in cmd
+        assert "-n 1" in cmd or "sample_size=1" in cmd.lower()
+
+    async def test_run_test_task_succeeds_with_exit_code_0(self, azure_provider):
+        """Test task validation succeeds with exit code 0."""
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b"Test task passed\n"
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        # Should not raise
+        await azure_provider._run_test_task()
+
+    async def test_run_test_task_fails_with_non_zero_exit_code(self, azure_provider):
+        """Test task validation fails with non-zero exit code."""
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b"output\n"
+        mock_stdout.channel.recv_exit_status.return_value = 1
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b"error\n"
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        with pytest.raises(RuntimeError, match="Test task validation failed"):
+            await azure_provider._run_test_task()
+
+    async def test_run_test_task_captures_stdout_stderr(self, azure_provider):
+        """Test task validation captures stdout/stderr."""
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b"stdout output\n"
+        mock_stdout.channel.recv_exit_status.return_value = 1
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b"stderr output\n"
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        try:
+            await azure_provider._run_test_task()
+        except RuntimeError as e:
+            # Verify error message includes output info
+            assert "exit code 1" in str(e)
+
+    async def test_run_test_task_uses_correct_timeout(self, azure_provider):
+        """Test task validation uses 600s timeout."""
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b"output\n"
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        await azure_provider._run_test_task()
+
+        # Verify timeout parameter
+        call_kwargs = mock_client.exec_command.call_args[1]
+        assert call_kwargs.get("timeout") == 600
+
+
+# ============================================================================
+# Updated Setup Tests
+# ============================================================================
+
+
+class TestUpdatedSetup:
+    """Test updated setup flow with environment setup and validation."""
+
+    @patch("mcpbr.infrastructure.azure.subprocess.run")
+    @patch("mcpbr.infrastructure.azure.paramiko.SSHClient")
+    @patch("mcpbr.infrastructure.azure.time.time", return_value=1234567890)
+    @patch("mcpbr.infrastructure.azure.os.environ.get")
+    async def test_setup_includes_dependency_installation(
+        self, mock_env_get, mock_time, mock_ssh_client, mock_run, azure_provider
+    ):
+        """Test full setup flow includes dependency installation."""
+        mock_env_get.return_value = "test-api-key"
+
+        # Mock subprocess calls
+        mock_run.side_effect = [
+            Mock(returncode=0),  # ssh-keygen
+            Mock(returncode=0, stdout='{"id": "rg-id"}'),  # az group show
+            Mock(returncode=0, stdout='{"id": "vm-id"}'),  # az vm create
+            Mock(returncode=0, stdout='"1.2.3.4"'),  # az vm show
+        ]
+
+        # Mock SSH client
+        mock_client = MagicMock()
+        mock_ssh_client.return_value = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b"output\n"
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        await azure_provider.setup()
+
+        # Verify SSH exec was called (for install, transfer, export, test)
+        assert mock_client.exec_command.call_count >= 4
+        commands = [call[0][0] for call in mock_client.exec_command.call_args_list]
+
+        # Check for dependency installation
+        assert any("apt-get" in cmd for cmd in commands)
+
+        # Check for env var export
+        assert any("bashrc" in cmd or "profile" in cmd for cmd in commands)
+
+        # Check for test task
+        assert any("mcpbr run" in cmd for cmd in commands)
+
+    @patch("mcpbr.infrastructure.azure.subprocess.run")
+    @patch("mcpbr.infrastructure.azure.paramiko.SSHClient")
+    @patch("mcpbr.infrastructure.azure.time.time", return_value=1234567890)
+    @patch("mcpbr.infrastructure.azure.os.environ.get")
+    async def test_setup_includes_config_transfer(
+        self, mock_env_get, mock_time, mock_ssh_client, mock_run, azure_provider
+    ):
+        """Test full setup flow includes config transfer."""
+        mock_env_get.return_value = "test-api-key"
+
+        mock_run.side_effect = [
+            Mock(returncode=0),  # ssh-keygen
+            Mock(returncode=0, stdout='{"id": "rg-id"}'),  # az group show
+            Mock(returncode=0, stdout='{"id": "vm-id"}'),  # az vm create
+            Mock(returncode=0, stdout='"1.2.3.4"'),  # az vm show
+        ]
+
+        mock_client = MagicMock()
+        mock_ssh_client.return_value = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b"output\n"
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
+        await azure_provider.setup()
+
+        # Verify SFTP was called
+        mock_client.open_sftp.assert_called_once()
+        mock_sftp.put.assert_called_once()
+
+    @patch("mcpbr.infrastructure.azure.subprocess.run")
+    @patch("mcpbr.infrastructure.azure.paramiko.SSHClient")
+    @patch("mcpbr.infrastructure.azure.time.time", return_value=1234567890)
+    @patch("mcpbr.infrastructure.azure.os.environ.get")
+    async def test_setup_includes_env_var_export(
+        self, mock_env_get, mock_time, mock_ssh_client, mock_run, azure_provider
+    ):
+        """Test full setup flow includes env var export."""
+        mock_env_get.return_value = "test-api-key"
+
+        mock_run.side_effect = [
+            Mock(returncode=0),  # ssh-keygen
+            Mock(returncode=0, stdout='{"id": "rg-id"}'),  # az group show
+            Mock(returncode=0, stdout='{"id": "vm-id"}'),  # az vm create
+            Mock(returncode=0, stdout='"1.2.3.4"'),  # az vm show
+        ]
+
+        mock_client = MagicMock()
+        mock_ssh_client.return_value = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b"output\n"
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
+        await azure_provider.setup()
+
+        # Verify env vars were exported
+        commands = [call[0][0] for call in mock_client.exec_command.call_args_list]
+        assert any("export ANTHROPIC_API_KEY" in cmd for cmd in commands)
+
+    @patch("mcpbr.infrastructure.azure.subprocess.run")
+    @patch("mcpbr.infrastructure.azure.paramiko.SSHClient")
+    @patch("mcpbr.infrastructure.azure.time.time", return_value=1234567890)
+    @patch("mcpbr.infrastructure.azure.os.environ.get")
+    async def test_setup_includes_test_task(
+        self, mock_env_get, mock_time, mock_ssh_client, mock_run, azure_provider
+    ):
+        """Test full setup flow includes test task."""
+        mock_env_get.return_value = "test-api-key"
+
+        mock_run.side_effect = [
+            Mock(returncode=0),  # ssh-keygen
+            Mock(returncode=0, stdout='{"id": "rg-id"}'),  # az group show
+            Mock(returncode=0, stdout='{"id": "vm-id"}'),  # az vm create
+            Mock(returncode=0, stdout='"1.2.3.4"'),  # az vm show
+        ]
+
+        mock_client = MagicMock()
+        mock_ssh_client.return_value = mock_client
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b"output\n"
+        mock_stdout.channel.recv_exit_status.return_value = 0
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b""
+
+        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
+        await azure_provider.setup()
+
+        # Verify test task was run
+        commands = [call[0][0] for call in mock_client.exec_command.call_args_list]
+        assert any("mcpbr run" in cmd for cmd in commands)
+
+    @patch("mcpbr.infrastructure.azure.subprocess.run")
+    @patch("mcpbr.infrastructure.azure.paramiko.SSHClient")
+    @patch("mcpbr.infrastructure.azure.time.time", return_value=1234567890)
+    @patch("mcpbr.infrastructure.azure.os.environ.get")
+    async def test_setup_fails_if_test_task_fails(
+        self, mock_env_get, mock_time, mock_ssh_client, mock_run, azure_provider
+    ):
+        """Test setup fails if test task fails."""
+        mock_env_get.return_value = "test-api-key"
+
+        mock_run.side_effect = [
+            Mock(returncode=0),  # ssh-keygen
+            Mock(returncode=0, stdout='{"id": "rg-id"}'),  # az group show
+            Mock(returncode=0, stdout='{"id": "vm-id"}'),  # az vm create
+            Mock(returncode=0, stdout='"1.2.3.4"'),  # az vm show
+        ]
+
+        mock_client = MagicMock()
+        mock_ssh_client.return_value = mock_client
+
+        # Return success for first few calls, then failure for test task
+        def exec_command_side_effect(cmd, timeout=300):
+            stdout = MagicMock()
+            stderr = MagicMock()
+
+            if "mcpbr run" in cmd:
+                # Test task fails
+                stdout.read.return_value = b"Test failed\n"
+                stdout.channel.recv_exit_status.return_value = 1
+                stderr.read.return_value = b"Error\n"
+            else:
+                # Other commands succeed
+                stdout.read.return_value = b"output\n"
+                stdout.channel.recv_exit_status.return_value = 0
+                stderr.read.return_value = b""
+
+            return (None, stdout, stderr)
+
+        mock_client.exec_command.side_effect = exec_command_side_effect
+
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
+        with pytest.raises(RuntimeError, match="Test task validation failed"):
+            await azure_provider.setup()
 
 
 # ============================================================================

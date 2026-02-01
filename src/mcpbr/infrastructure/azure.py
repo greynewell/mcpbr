@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -281,6 +282,113 @@ class AzureProvider(InfrastructureProvider):
         except Exception as e:
             raise RuntimeError(f"SSH command failed: {e}") from e
 
+    async def _install_dependencies(self) -> None:
+        """Install Docker, Python, and mcpbr on VM."""
+        console = Console()
+        console.print("[cyan]Installing dependencies on VM...[/cyan]")
+
+        # Update apt cache
+        install_cmd = (
+            "sudo apt-get update -qq && "
+            "sudo apt-get install -y -qq curl python3-pip && "
+            # Install Docker
+            "curl -fsSL https://get.docker.com -o get-docker.sh && "
+            "sudo sh get-docker.sh && "
+            "sudo usermod -aG docker $USER && "
+            # Install Python version
+            f"sudo apt-get install -y python{self.azure_config.python_version} python{self.azure_config.python_version}-venv && "
+            # Install mcpbr
+            "pip3 install mcpbr"
+        )
+
+        exit_code, stdout, stderr = await self._ssh_exec(install_cmd, timeout=600)
+
+        # Don't fail hard on installation issues - log and continue
+        if exit_code != 0:
+            console.print(
+                f"[yellow]⚠ Some installations may have issues (exit code {exit_code})[/yellow]"
+            )
+            console.print(f"[dim]{stderr[:500]}[/dim]")
+        else:
+            console.print("[green]✓ Dependencies installed[/green]")
+
+    async def _transfer_config(self) -> None:
+        """Transfer configuration file to VM via SFTP."""
+        console = Console()
+        console.print("[cyan]Transferring configuration...[/cyan]")
+
+        # Create temporary config file
+        import tempfile
+
+        import yaml
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            # Serialize config to YAML (convert Pydantic model to dict)
+            config_dict = self.config.model_dump()
+            yaml.dump(config_dict, f)
+            temp_config_path = f.name
+
+        sftp = None
+        try:
+            # Upload via SFTP
+            sftp = self.ssh_client.open_sftp()
+            sftp.put(temp_config_path, "/home/azureuser/config.yaml")
+            console.print("[green]✓ Configuration transferred[/green]")
+        finally:
+            if sftp:
+                sftp.close()
+            Path(temp_config_path).unlink()
+
+    async def _export_env_vars(self) -> None:
+        """Export environment variables to VM."""
+        console = Console()
+        console.print("[cyan]Exporting environment variables...[/cyan]")
+
+        env_vars = {}
+        for key in self.azure_config.env_keys_to_export:
+            value = os.environ.get(key)
+            if value:
+                env_vars[key] = value
+            else:
+                console.print(f"[yellow]⚠ Environment variable {key} not found locally[/yellow]")
+
+        if not env_vars:
+            console.print("[yellow]⚠ No environment variables to export[/yellow]")
+            return
+
+        # Write to .bashrc and .profile
+        env_commands = [f'export {k}="{v}"' for k, v in env_vars.items()]
+        bashrc_append = "\n".join(env_commands)
+
+        # Escape for shell command
+        bashrc_append_escaped = bashrc_append.replace('"', '\\"')
+
+        await self._ssh_exec(f'echo "{bashrc_append_escaped}" >> ~/.bashrc')
+        await self._ssh_exec(f'echo "{bashrc_append_escaped}" >> ~/.profile')
+
+        console.print(f"[green]✓ Exported {len(env_vars)} environment variables[/green]")
+
+    async def _run_test_task(self) -> None:
+        """Run single test task to validate setup."""
+        console = Console()
+        console.print("[cyan]Running test task to validate setup...[/cyan]")
+
+        # Run mcpbr with sample_size=1, max_concurrent=1
+        test_cmd = "mcpbr run -c ~/config.yaml -M -n 1"
+
+        exit_code, stdout, stderr = await self._ssh_exec(test_cmd, timeout=600)
+
+        if exit_code != 0:
+            console.print("[red]✗ Test task failed![/red]")
+            console.print(f"[red]STDOUT:[/red]\n{stdout[:1000]}")
+            console.print(f"[red]STDERR:[/red]\n{stderr[:1000]}")
+            raise RuntimeError(
+                f"Test task validation failed with exit code {exit_code}. "
+                f"This indicates the MCP server or evaluation setup has issues."
+            )
+
+        console.print("[green]✓ Test task passed - setup validated[/green]")
+
     async def setup(self) -> None:
         """Provision Azure VM and prepare for evaluation.
 
@@ -289,6 +397,10 @@ class AzureProvider(InfrastructureProvider):
         2. Creates the VM
         3. Retrieves the public IP
         4. Waits for SSH to become available
+        5. Installs dependencies (Docker, Python, mcpbr)
+        6. Transfers configuration file
+        7. Exports environment variables
+        8. Runs test task to validate setup
 
         Raises:
             RuntimeError: If setup fails at any step.
@@ -299,18 +411,31 @@ class AzureProvider(InfrastructureProvider):
         try:
             # Determine VM size
             vm_size = self._determine_vm_size()
+            console.print(f"[cyan]  VM Size: {vm_size}[/cyan]")
 
             # Create VM
             await self._create_vm(vm_size)
 
             # Get IP
             self.vm_ip = await self._get_vm_ip()
-            console.print(f"[cyan]VM IP: {self.vm_ip}[/cyan]")
+            console.print(f"[cyan]  VM IP: {self.vm_ip}[/cyan]")
 
             # Wait for SSH
             await self._wait_for_ssh()
 
-            console.print("[green]✓ VM provisioned successfully[/green]")
+            # Install dependencies
+            await self._install_dependencies()
+
+            # Transfer config
+            await self._transfer_config()
+
+            # Export environment variables
+            await self._export_env_vars()
+
+            # Run test task
+            await self._run_test_task()
+
+            console.print("[green]✓ Azure VM ready for evaluation[/green]")
 
         except Exception:
             self._error_occurred = True

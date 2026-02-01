@@ -55,21 +55,25 @@ class GSM8KBenchmark:
             # task_ids in GSM8K are indices (0, 1, 2, ...)
             task_id_set = set(task_ids)
             tasks = []
+            original_indices = []
             for idx, item in enumerate(dataset):
                 if str(idx) in task_id_set:
                     tasks.append(item)
+                    original_indices.append(idx)
         else:
             tasks = list(dataset)
+            original_indices = list(range(len(tasks)))
 
         if sample_size and len(tasks) > sample_size:
             tasks = tasks[:sample_size]
+            original_indices = original_indices[:sample_size]
 
         # Augment tasks with instance_id for compatibility with harness
         augmented_tasks = []
         for idx, task in enumerate(tasks):
             augmented = dict(task)
-            # Use index as instance_id since GSM8K doesn't have explicit IDs
-            augmented["instance_id"] = f"gsm8k_{idx}"
+            # Use original dataset index as instance_id since GSM8K doesn't have explicit IDs
+            augmented["instance_id"] = f"gsm8k_{original_indices[idx]}"
             # Generate problem_statement from question
             augmented["problem_statement"] = self._generate_problem_statement(augmented)
             # Store the ground truth answer for evaluation
@@ -180,7 +184,7 @@ class GSM8KBenchmark:
             "pip3 install --quiet numpy scipy sympy 2>&1 | grep -v 'Requirement already satisfied' || true"
         )
 
-        exit_code, stdout, stderr = await env.exec_command(
+        _exit_code, _stdout, _stderr = await env.exec_command(
             install_cmd,
             timeout=300,
         )

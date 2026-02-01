@@ -150,7 +150,7 @@ class GAIABenchmark:
 
     async def evaluate(
         self,
-        env: TaskEnvironment,
+        _env: TaskEnvironment,
         task: dict[str, Any],
         solution: str,
     ) -> dict[str, Any]:
@@ -159,7 +159,7 @@ class GAIABenchmark:
         Uses exact match on the final answer.
 
         Args:
-            env: Task environment.
+            _env: Task environment (unused; evaluation is offline).
             task: GAIA task dictionary.
             solution: Solution to evaluate.
 

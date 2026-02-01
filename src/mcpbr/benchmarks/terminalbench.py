@@ -159,7 +159,7 @@ class TerminalBenchBenchmark:
         self,
         env: TaskEnvironment,
         task: dict[str, Any],
-        solution: str,
+        _solution: str,
     ) -> dict[str, Any]:
         """Evaluate a solution for TerminalBench task.
 
@@ -168,7 +168,7 @@ class TerminalBenchBenchmark:
         Args:
             env: Task environment.
             task: TerminalBench task dictionary.
-            solution: Solution to evaluate.
+            _solution: Solution to evaluate (unused; validation checks env state).
 
         Returns:
             Dictionary with evaluation results including 'resolved' boolean.

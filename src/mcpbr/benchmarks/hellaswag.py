@@ -146,7 +146,7 @@ class HellaSwagBenchmark:
 
     async def evaluate(
         self,
-        env: TaskEnvironment,
+        _env: TaskEnvironment,
         task: dict[str, Any],
         solution: str,
     ) -> dict[str, Any]:
@@ -155,7 +155,7 @@ class HellaSwagBenchmark:
         Checks if the selected option matches the correct label.
 
         Args:
-            env: Task environment.
+            _env: Task environment (unused; evaluation is offline).
             task: HellaSwag task dictionary.
             solution: Solution to evaluate (should contain option number).
 

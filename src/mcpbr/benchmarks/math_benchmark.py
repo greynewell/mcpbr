@@ -152,7 +152,7 @@ class MATHBenchmark:
 
     async def evaluate(
         self,
-        env: TaskEnvironment,
+        _env: TaskEnvironment,
         task: dict[str, Any],
         solution: str,
     ) -> dict[str, Any]:
@@ -161,7 +161,7 @@ class MATHBenchmark:
         Extracts the answer from the solution and compares it to ground truth.
 
         Args:
-            env: Task environment.
+            _env: Task environment (unused; evaluation is offline).
             task: MATH task dictionary.
             solution: Solution to evaluate.
 

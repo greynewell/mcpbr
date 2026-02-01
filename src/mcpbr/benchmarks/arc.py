@@ -154,7 +154,7 @@ class ARCBenchmark:
 
     async def evaluate(
         self,
-        env: TaskEnvironment,
+        _env: TaskEnvironment,
         task: dict[str, Any],
         solution: str,
     ) -> dict[str, Any]:
@@ -163,7 +163,7 @@ class ARCBenchmark:
         Checks if the selected answer matches the correct answer key.
 
         Args:
-            env: Task environment.
+            _env: Task environment (unused; evaluation is offline).
             task: ARC task dictionary.
             solution: Solution to evaluate.
 

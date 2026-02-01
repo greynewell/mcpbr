@@ -62,7 +62,7 @@ def _load_single_benchmark(name: str) -> dict[str, Any]:
         else:
             result["error"] = "load_tasks returned empty list"
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - intentionally broad for reporting
         result["error"] = f"{type(e).__name__}: {str(e)[:300]}"
 
     return result
@@ -101,7 +101,7 @@ class TestBenchmarkDataLoading:
                 name = futures[future]
                 try:
                     results[name] = future.result()
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 - intentionally broad for reporting
                     results[name] = {
                         "benchmark": name,
                         "error": f"Thread error: {e}",

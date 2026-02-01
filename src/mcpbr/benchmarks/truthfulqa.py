@@ -148,7 +148,7 @@ class TruthfulQABenchmark:
 
     async def evaluate(
         self,
-        env: TaskEnvironment,
+        _env: TaskEnvironment,
         task: dict[str, Any],
         solution: str,
     ) -> dict[str, Any]:
@@ -158,7 +158,7 @@ class TruthfulQABenchmark:
         and incorrect answer sets.
 
         Args:
-            env: Task environment.
+            _env: Task environment (unused; evaluation is offline).
             task: TruthfulQA task dictionary.
             solution: Solution to evaluate.
 

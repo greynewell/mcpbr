@@ -146,7 +146,7 @@ class RepoQABenchmark:
 
     async def evaluate(
         self,
-        env: TaskEnvironment,
+        _env: TaskEnvironment,
         task: dict[str, Any],
         solution: str,
     ) -> dict[str, Any]:
@@ -155,7 +155,7 @@ class RepoQABenchmark:
         Checks if the model correctly identified the target function.
 
         Args:
-            env: Task environment.
+            _env: Task environment (unused; evaluation is offline).
             task: RepoQA task dictionary.
             solution: Solution to evaluate.
 

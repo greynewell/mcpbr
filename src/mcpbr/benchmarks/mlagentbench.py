@@ -149,20 +149,25 @@ class MLAgentBenchBenchmark:
         }
         return await docker_manager.create_environment(temp_task)
 
+    # Metrics where lower values indicate better performance
+    _LOWER_IS_BETTER_METRICS = {"loss", "rmse", "mae", "mse", "error", "perplexity"}
+
     async def evaluate(
         self,
         env: TaskEnvironment,
         task: dict[str, Any],
-        solution: str,
+        _solution: str,
     ) -> dict[str, Any]:
         """Evaluate a solution for MLAgentBench task.
 
         Checks if the model achieved an improvement over baseline.
+        Automatically detects whether the metric is "higher is better"
+        (accuracy, score) or "lower is better" (loss, RMSE, MAE).
 
         Args:
             env: Task environment.
             task: MLAgentBench task dictionary.
-            solution: Solution to evaluate.
+            _solution: Solution to evaluate (unused; evaluation runs via env).
 
         Returns:
             Dictionary with evaluation results including 'resolved' boolean.
@@ -183,14 +188,23 @@ class MLAgentBenchBenchmark:
             baseline = task.get("baseline_score", 0)
             try:
                 baseline_val = float(baseline) if baseline else 0.0
-                resolved = score > baseline_val
             except (ValueError, TypeError):
                 baseline_val = 0.0
-                resolved = True
+
+            # Detect metric direction: lower-is-better for loss-style metrics
+            metric_name = task.get("metric", "").lower()
+            lower_is_better = any(m in metric_name for m in self._LOWER_IS_BETTER_METRICS)
+
+            if lower_is_better:
+                resolved = score < baseline_val if baseline_val > 0 else True
+            else:
+                resolved = score > baseline_val
+
             return {
                 "resolved": resolved,
                 "score": score,
                 "baseline": baseline_val,
+                "metric_direction": "lower_is_better" if lower_is_better else "higher_is_better",
             }
 
         return {

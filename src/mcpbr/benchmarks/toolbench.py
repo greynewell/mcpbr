@@ -160,7 +160,7 @@ class ToolBenchBenchmark:
 
     async def evaluate(
         self,
-        env: TaskEnvironment,
+        _env: TaskEnvironment,
         task: dict[str, Any],
         solution: str,
     ) -> dict[str, Any]:
@@ -169,7 +169,7 @@ class ToolBenchBenchmark:
         Compares tool call sequences against ground truth.
 
         Args:
-            env: Task environment.
+            _env: Task environment (unused; evaluation is offline).
             task: ToolBench task dictionary.
             solution: Solution to evaluate (tool call sequence).
 

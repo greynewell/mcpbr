@@ -166,10 +166,12 @@ class APPSBenchmark:
         """
         # Write solution to container
         encoded_solution = base64.b64encode(solution.encode()).decode()
-        await env.exec_command(
+        exit_code, _stdout, stderr = await env.exec_command(
             f"printf '%s' '{encoded_solution}' | base64 -d > solution.py",
             timeout=10,
         )
+        if exit_code != 0:
+            return {"resolved": False, "error": f"Failed to write solution: {stderr[:500]}"}
 
         input_output = task.get("input_output", "")
         if not input_output:

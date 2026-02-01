@@ -174,15 +174,38 @@ class CoderEvalBenchmark:
         Returns:
             Dictionary with evaluation results including 'resolved' boolean.
         """
+        language = task.get("language", "Python").lower()
+
+        # Map language to execution command
+        run_commands = {
+            "python": "python3 test_solution.py",
+            "java": "javac test_solution.java && java test_solution",
+            "javascript": "node test_solution.js",
+            "typescript": "npx ts-node test_solution.ts",
+        }
+        run_cmd = run_commands.get(language)
+        if not run_cmd:
+            return {"resolved": False, "error": f"Unsupported language: {language}"}
+
         test_code = task.get("test", "")
         if not test_code:
             return {"resolved": False, "error": "No test code provided"}
+
+        # Determine test file extension
+        extensions = {
+            "python": "py",
+            "java": "java",
+            "javascript": "js",
+            "typescript": "ts",
+        }
+        ext = extensions.get(language, "py")
+        test_file = f"test_solution.{ext}"
 
         full_test = f"{solution}\n\n{test_code}\n"
         encoded = base64.b64encode(full_test.encode()).decode()
 
         exit_code, stdout, stderr = await env.exec_command(
-            f"echo '{encoded}' | base64 -d > test_solution.py && python3 test_solution.py",
+            f"echo '{encoded}' | base64 -d > {test_file} && {run_cmd}",
             timeout=60,
         )
 

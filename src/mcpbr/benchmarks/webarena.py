@@ -146,7 +146,7 @@ class WebArenaBenchmark:
 
     async def evaluate(
         self,
-        env: TaskEnvironment,
+        _env: TaskEnvironment,
         task: dict[str, Any],
         solution: str,
     ) -> dict[str, Any]:
@@ -155,7 +155,7 @@ class WebArenaBenchmark:
         Verifies task completion against expected outcomes.
 
         Args:
-            env: Task environment.
+            _env: Task environment (unused; evaluation is offline).
             task: WebArena task dictionary.
             solution: Solution to evaluate.
 

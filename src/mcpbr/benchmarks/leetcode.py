@@ -175,8 +175,18 @@ class LeetCodeBenchmark:
         Returns:
             Dictionary with evaluation results including 'resolved' boolean.
         """
-        # LeetCode evaluation depends on test case format
-        # Basic approach: look for test assertions in the solution
+        # Write solution to container first
+        encoded_solution = base64.b64encode(solution.encode()).decode()
+        exit_code, _stdout, stderr = await env.exec_command(
+            f"printf '%s' '{encoded_solution}' | base64 -d > solution.py",
+            timeout=10,
+        )
+        if exit_code != 0:
+            return {"resolved": False, "error": f"Failed to write solution: {stderr[:500]}"}
+
+        # Build test script: import solution then run assertions if available
+        # LeetCode dataset doesn't always provide structured test cases,
+        # so we combine execution check with any assertions the agent included
         test_code = solution + "\n\nprint('SOLUTION_EXECUTED')\n"
         encoded = base64.b64encode(test_code.encode()).decode()
 

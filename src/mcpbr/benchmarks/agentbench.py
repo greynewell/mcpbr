@@ -141,7 +141,7 @@ class AgentBenchBenchmark:
 
     async def evaluate(
         self,
-        env: TaskEnvironment,
+        _env: TaskEnvironment,
         task: dict[str, Any],
         solution: str,
     ) -> dict[str, Any]:
@@ -150,7 +150,7 @@ class AgentBenchBenchmark:
         Checks task completion based on environment-specific criteria.
 
         Args:
-            env: Task environment.
+            _env: Task environment (unused; evaluation is offline).
             task: AgentBench task dictionary.
             solution: Solution to evaluate.
 

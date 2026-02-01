@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-02-01
+
 ### Added
 
 - **Side-by-Side MCP Server Comparison** (#350): A/B test two MCP servers in a single evaluation run
@@ -631,6 +633,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--no-prebuilt` CLI flag to disable pre-built images and build from scratch
 - Network access for containers to enable API calls from within Docker
 
+[0.4.3]: https://github.com/greynewell/mcpbr/releases/tag/v0.4.3
 [0.4.2]: https://github.com/greynewell/mcpbr/releases/tag/v0.4.2
 [0.4.1]: https://github.com/greynewell/mcpbr/releases/tag/v0.4.1
 [0.4.0]: https://github.com/greynewell/mcpbr/releases/tag/v0.4.0

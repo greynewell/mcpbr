@@ -76,7 +76,19 @@ class HarnessConfig(BaseModel):
     Supports multiple model providers and agent harnesses.
     """
 
-    mcp_server: MCPServerConfig = Field(description="MCP server configuration")
+    # Single server field (for backward compatibility)
+    mcp_server: MCPServerConfig | None = Field(
+        default=None, description="MCP server configuration (single server mode)"
+    )
+
+    # Comparison mode fields
+    mcp_server_a: MCPServerConfig | None = Field(
+        default=None, description="First MCP server for comparison"
+    )
+    mcp_server_b: MCPServerConfig | None = Field(
+        default=None, description="Second MCP server for comparison"
+    )
+    comparison_mode: bool = Field(default=False, description="Enable side-by-side comparison mode")
 
     provider: str = Field(
         default="anthropic",
@@ -239,6 +251,21 @@ class HarnessConfig(BaseModel):
 
         Anthropic provider accepts any model ID (direct API).
         """
+        return self
+
+    @model_validator(mode="after")
+    def validate_server_config(self) -> "HarnessConfig":
+        """Validate MCP server configuration consistency."""
+        if self.comparison_mode:
+            if not (self.mcp_server_a and self.mcp_server_b):
+                raise ValueError("comparison_mode requires both mcp_server_a and mcp_server_b")
+            if self.mcp_server:
+                raise ValueError("comparison_mode: use mcp_server_a/b instead of mcp_server")
+        else:
+            if not self.mcp_server:
+                raise ValueError("mcp_server required when comparison_mode is false")
+            if self.mcp_server_a or self.mcp_server_b:
+                raise ValueError("mcp_server_a/b only valid in comparison_mode")
         return self
 
     @field_validator("max_concurrent")

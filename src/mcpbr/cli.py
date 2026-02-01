@@ -751,7 +751,13 @@ To archive:
         if log_file:
             log_file.close()
 
-    print_summary(results, console)
+    # Use comparison summary if in comparison mode
+    if results.summary.get("mcp_server_a"):
+        from .reporting import print_comparison_summary
+
+        print_comparison_summary(results, console)
+    else:
+        print_summary(results, console)
 
     if output_path:
         save_json_results(results, output_path)

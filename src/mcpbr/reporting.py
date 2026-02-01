@@ -382,6 +382,111 @@ def print_comprehensive_statistics(stats: "ComprehensiveStatistics", console: Co
                 console.print(f"  {category}: {count}")
 
 
+def print_comparison_summary(results: "EvaluationResults", console: Console) -> None:
+    """Print side-by-side comparison summary.
+
+    Args:
+        results: Evaluation results from comparison mode.
+        console: Rich console for output.
+    """
+    if not results.summary.get("mcp_server_a"):
+        # Not comparison mode, fallback to regular print_summary
+        print_summary(results, console)
+        return
+
+    summary = results.summary
+    comp = summary["comparison"]
+
+    # Comparison title
+    console.print()
+    console.print("[bold cyan]Side-by-Side MCP Server Comparison[/bold cyan]")
+    console.print()
+
+    # Resolution comparison table
+    table = Table(title="Resolution Rate Comparison")
+    table.add_column("Metric", style="cyan")
+    table.add_column(summary["mcp_server_a"]["name"], style="green")
+    table.add_column(summary["mcp_server_b"]["name"], style="yellow")
+    table.add_column("Δ (A - B)", style="magenta")
+
+    a_resolved = summary["mcp_server_a"]["resolved"]
+    b_resolved = summary["mcp_server_b"]["resolved"]
+    a_total = summary["mcp_server_a"]["total"]
+    b_total = summary["mcp_server_b"]["total"]
+    a_rate = summary["mcp_server_a"]["resolution_rate"]
+    b_rate = summary["mcp_server_b"]["resolution_rate"]
+
+    table.add_row(
+        "Resolved Tasks",
+        f"{a_resolved}/{a_total}",
+        f"{b_resolved}/{b_total}",
+        f"+{comp['a_vs_b_delta']}" if comp["a_vs_b_delta"] > 0 else str(comp["a_vs_b_delta"]),
+    )
+    table.add_row(
+        "Resolution Rate",
+        f"{a_rate:.1%}",
+        f"{b_rate:.1%}",
+        f"+{comp['a_vs_b_improvement_pct']:.1f}%"
+        if comp["a_vs_b_improvement_pct"] > 0
+        else f"{comp['a_vs_b_improvement_pct']:.1f}%",
+    )
+
+    console.print(table)
+
+    # Per-task comparison table
+    console.print()
+    task_table = Table(title="Per-Task Results")
+    task_table.add_column("Instance ID", style="cyan")
+    task_table.add_column(summary["mcp_server_a"]["name"], style="green")
+    task_table.add_column(summary["mcp_server_b"]["name"], style="yellow")
+    task_table.add_column("Winner", style="magenta bold")
+
+    for task in results.tasks:
+        a_resolved = task.mcp_server_a and task.mcp_server_a.get("resolved")
+        b_resolved = task.mcp_server_b and task.mcp_server_b.get("resolved")
+
+        a_status = "[green]PASS[/green]" if a_resolved else "[red]FAIL[/red]"
+        b_status = "[green]PASS[/green]" if b_resolved else "[red]FAIL[/red]"
+
+        if a_resolved and not b_resolved:
+            winner = f"[green]{summary['mcp_server_a']['name']}[/green]"
+        elif b_resolved and not a_resolved:
+            winner = f"[yellow]{summary['mcp_server_b']['name']}[/yellow]"
+        elif a_resolved and b_resolved:
+            winner = "[dim]Both[/dim]"
+        else:
+            winner = "[dim]Neither[/dim]"
+
+        task_table.add_row(task.instance_id, a_status, b_status, winner)
+
+    console.print(task_table)
+
+    # Unique wins summary
+    if comp["a_unique_wins"]:
+        console.print()
+        console.print(
+            f"[green]✓ {summary['mcp_server_a']['name']} unique wins:[/green] "
+            f"{len(comp['a_unique_wins'])} tasks"
+        )
+        for task_id in comp["a_unique_wins"][:5]:
+            console.print(f"  - {task_id}")
+        if len(comp["a_unique_wins"]) > 5:
+            console.print(f"  ... and {len(comp['a_unique_wins']) - 5} more")
+
+    if comp["b_unique_wins"]:
+        console.print()
+        console.print(
+            f"[yellow]✓ {summary['mcp_server_b']['name']} unique wins:[/yellow] "
+            f"{len(comp['b_unique_wins'])} tasks"
+        )
+        for task_id in comp["b_unique_wins"][:5]:
+            console.print(f"  - {task_id}")
+        if len(comp["b_unique_wins"]) > 5:
+            console.print(f"  ... and {len(comp['b_unique_wins']) - 5} more")
+
+    console.print()
+
+
 def print_summary(results: "EvaluationResults", console: Console) -> None:
     """Print a summary of evaluation results to the console.
 
@@ -717,6 +822,10 @@ def save_json_results(results: "EvaluationResults", output_path: Path) -> None:
         }
         if task.mcp:
             task_data["mcp"] = task.mcp
+        if task.mcp_server_a:
+            task_data["mcp_server_a"] = task.mcp_server_a
+        if task.mcp_server_b:
+            task_data["mcp_server_b"] = task.mcp_server_b
         if task.baseline:
             task_data["baseline"] = task.baseline
         data["tasks"].append(task_data)
@@ -745,6 +854,10 @@ def save_yaml_results(results: "EvaluationResults", output_path: Path) -> None:
         }
         if task.mcp:
             task_data["mcp"] = task.mcp
+        if task.mcp_server_a:
+            task_data["mcp_server_a"] = task.mcp_server_a
+        if task.mcp_server_b:
+            task_data["mcp_server_b"] = task.mcp_server_b
         if task.baseline:
             task_data["baseline"] = task.baseline
         data["tasks"].append(task_data)
@@ -780,6 +893,14 @@ def save_xml_results(results: "EvaluationResults", output_path: Path) -> None:
         if task.mcp:
             mcp_elem = ET.SubElement(task_elem, "mcp")
             _dict_to_xml(task.mcp, mcp_elem)
+
+        if task.mcp_server_a:
+            mcp_a_elem = ET.SubElement(task_elem, "mcp_server_a")
+            _dict_to_xml(task.mcp_server_a, mcp_a_elem)
+
+        if task.mcp_server_b:
+            mcp_b_elem = ET.SubElement(task_elem, "mcp_server_b")
+            _dict_to_xml(task.mcp_server_b, mcp_b_elem)
 
         if task.baseline:
             baseline_elem = ET.SubElement(task_elem, "baseline")

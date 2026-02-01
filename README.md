@@ -320,6 +320,60 @@ max_concurrent: 4
 mcpbr run --config config.yaml
 ```
 
+## Side-by-Side Server Comparison
+
+Compare two MCP servers head-to-head in a single evaluation run to see which implementation performs better.
+
+### Quick Example
+
+```yaml
+# comparison-config.yaml
+comparison_mode: true
+
+mcp_server_a:
+  name: "Task Queries"
+  command: node
+  args: [build/index.js]
+  cwd: /path/to/task-queries
+
+mcp_server_b:
+  name: "Edge Identity"
+  command: node
+  args: [build/index.js]
+  cwd: /path/to/edge-identity
+
+benchmark: swe-bench-lite
+sample_size: 10
+```
+
+```bash
+mcpbr run -c comparison-config.yaml -o results.json
+```
+
+### Results Output
+
+```
+Side-by-Side MCP Server Comparison
+
+┏━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┓
+┃ Metric            ┃ Task Queries ┃ Edge Identity┃ Δ (A - B)┃
+┡━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━┩
+│ Resolved Tasks    │ 4/10         │ 2/10         │ +2       │
+│ Resolution Rate   │ 40.0%        │ 20.0%        │ +100.0%  │
+└───────────────────┴──────────────┴──────────────┴──────────┘
+
+✓ Task Queries unique wins: 2 tasks
+  - django__django-12286
+  - astropy__astropy-7606
+```
+
+**Use cases:**
+- **A/B testing**: Compare optimized vs. baseline implementations
+- **Tool evaluation**: Test different MCP tool sets
+- **Version comparison**: Benchmark v2.0 vs. v1.5
+
+See [docs/comparison-mode.md](docs/comparison-mode.md) for complete documentation.
+
 ## Claude Code Integration
 
 [![Claude Code Ready](https://img.shields.io/badge/Claude_Code-Ready-5865F2?style=flat&logo=anthropic)](https://claude.ai/download)

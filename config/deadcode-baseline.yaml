@@ -2,7 +2,7 @@
 # Uses only filesystem MCP (grep-based approach)
 
 benchmark: "dead-code"
-sample_size: 3
+sample_size: 1  # Now uses typescript-express-app corpus (~35 files, ~55 dead functions)
 
 # Filesystem MCP only - agent must use grep/search to find dead code
 mcp_server:
@@ -17,9 +17,9 @@ provider: "anthropic"
 agent_harness: "claude-code"
 model: "claude-sonnet-4-20250514"
 
-timeout_seconds: 300
+timeout_seconds: 900  # 15 min timeout for larger codebase
 max_concurrent: 1
-max_iterations: 15
+max_iterations: 50  # More iterations for comprehensive grep-based analysis
 
 # Custom prompt emphasizing grep/search approach
 agent_prompt: |
@@ -28,17 +28,18 @@ agent_prompt: |
   {problem_statement}
 
   APPROACH:
-  1. List all files in the workspace
-  2. Read each file to understand the code structure
-  3. Search for function/class definitions
-  4. Search for usages of each function/class
+  1. List all files in the workspace to understand the structure
+  2. Read source files to find function/class definitions
+  3. For each function/class, search for usages across the codebase
+  4. Trace call chains from entry points (routes, main, exports)
   5. Mark as "dead" any code that is:
-     - Not exported AND
-     - Not called by any other code
+     - Not exported as a route handler AND
+     - Not called transitively from any entry point
 
-  Output your findings to 'dead_code_report.json' with format:
+  Update REPORT.json with format:
   {{
     "dead_code": [
       {{"file": "path/file.ts", "name": "functionName", "line": 10, "type": "function"}}
-    ]
+    ],
+    "analysis_complete": true
   }}

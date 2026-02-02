@@ -66,12 +66,15 @@ class Benchmark(Protocol):
         self,
         task: dict[str, Any],
         docker_manager: DockerEnvironmentManager,
+        is_mcp: bool = False,
     ) -> TaskEnvironment:
         """Create an isolated environment for the task.
 
         Args:
             task: Task dictionary.
             docker_manager: Docker environment manager.
+            is_mcp: Whether this environment is for MCP agent (vs baseline).
+                    Benchmarks can use this to provide different resources.
 
         Returns:
             TaskEnvironment for the task.

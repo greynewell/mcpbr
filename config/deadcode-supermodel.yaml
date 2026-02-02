@@ -4,6 +4,12 @@
 benchmark: "dead-code"
 sample_size: 3
 
+# Prompt versioning metadata
+prompt_version:
+  mcp_agent: "v1.0"
+  baseline_agent: "v1.0"
+  changelog: "https://github.com/supermodeltools/dead-code-benchmark-corpus/blob/main/prompts/CHANGELOG.md"
+
 # Supermodel MCP - kept for potential API fallback
 mcp_server:
   name: "supermodel"
@@ -29,27 +35,30 @@ agent_prompt: |
 
   {problem_statement}
 
-  IMPORTANT: A pre-generated call graph is available at `.supermodel/graph.json`.
-  This file contains the complete call graph analysis - USE IT FIRST before any manual analysis.
+  CRITICAL INSTRUCTIONS - FOLLOW EXACTLY:
 
-  APPROACH:
-  1. Read the call graph from .supermodel/graph.json
-  2. Parse the graph structure:
-     - "nodes": All functions/classes in the codebase with metadata
-     - "edges": Call relationships (which function calls which)
-     - "entry_points": Exported functions and module entry points
-  3. Find all nodes with NO incoming edges in the call graph that are NOT entry points
-  4. These are dead code - they're defined but never called
+  DO NOT call any MCP tools (get_call_graph, get_domain_graph, etc.).
+  DO NOT grep or read source files.
+  The answer is ALREADY COMPUTED for you in a local file.
 
-  ALGORITHM:
-  - Build set of all node IDs that appear as "to" in edges (functions that are called)
-  - Build set of entry_points (these are NOT dead even if uncalled)
-  - Dead code = nodes NOT in called_set AND NOT in entry_points
+  EXACT STEPS:
+  1. Read the file `.supermodel/dead-code-analysis.json` (it exists, just read it)
+  2. Read the file `REPORT.json` (required before writing)
+  3. Parse the analysis file - it contains:
+     - "dead_code_candidates": array of strings like "src/file.ts::functionName"
+     - "functions": dict with line numbers for each function
+  4. For each item in dead_code_candidates:
+     - Split on "::" to get file and name
+     - Look up line number from functions dict
+     - Add to dead_code array
+  5. Write REPORT.json with format below
 
-  Update REPORT.json with format:
+  REPORT.json format:
   {{
     "dead_code": [
-      {{"file": "path/file.ts", "name": "functionName", "line": 10, "type": "function"}}
+      {{"file": "src/file.ts", "name": "functionName", "line": 10, "type": "function"}}
     ],
     "analysis_complete": true
   }}
+
+  This is a 5-minute task. Read graph.json, read REPORT.json, transform data, write REPORT.json. Done.

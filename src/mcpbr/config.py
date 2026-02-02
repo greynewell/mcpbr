@@ -589,6 +589,11 @@ class HarnessConfig(BaseModel):
         description="Custom prompt template for the agent. Use {problem_statement} placeholder.",
     )
 
+    prompt_version: dict[str, str] | None = Field(
+        default=None,
+        description="Prompt version metadata for tracking. E.g., {'mcp_agent': 'v1.0', 'baseline_agent': 'v1.0'}",
+    )
+
     model: str = Field(
         default=DEFAULT_MODEL,
         description="Model ID for the selected provider",

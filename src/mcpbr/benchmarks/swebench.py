@@ -112,6 +112,7 @@ class SWEBenchmark:
         self,
         task: dict[str, Any],
         docker_manager: DockerEnvironmentManager,
+        is_mcp: bool = False,
     ) -> TaskEnvironment:
         """Create environment for SWE-bench task.
 
@@ -120,6 +121,7 @@ class SWEBenchmark:
 
         Args:
             task: SWE-bench task dictionary.
+            is_mcp: Whether this is for MCP agent (unused in this benchmark).
             docker_manager: Docker environment manager.
 
         Returns:

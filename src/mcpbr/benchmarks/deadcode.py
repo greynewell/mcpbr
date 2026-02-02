@@ -1,12 +1,19 @@
 """Dead code detection benchmark implementation."""
 
 import json
+import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
 
 from ..docker_env import DockerEnvironmentManager, TaskEnvironment
 from .base import BenchmarkTask
+
+# Corpus repository configuration
+CORPUS_REPO = "git@github.com:supermodeltools/dead-code-benchmark-corpus.git"
+CORPUS_HTTPS = "https://github.com/supermodeltools/dead-code-benchmark-corpus.git"
+DEFAULT_CORPUS_CACHE = Path.home() / ".cache" / "mcpbr" / "dead-code-benchmark-corpus"
 
 # Placeholder content for the report file - agent will modify this
 REPORT_PLACEHOLDER = """{
@@ -15,86 +22,100 @@ REPORT_PLACEHOLDER = """{
 }
 """
 
-# Pre-generated call graphs for each task (implements issue #82 concept)
-# These provide instant context injection without API calls
-CALL_GRAPH_001 = """{
-  "metadata": {
-    "generated_at": "2025-01-30T12:00:00Z",
-    "language": "typescript",
-    "task_id": "dead-code-001"
-  },
-  "nodes": [
-    {"id": "src/index.ts::<module>", "file": "src/index.ts", "name": "<module>", "type": "module", "line": 1, "exported": true},
-    {"id": "src/utils.ts::processAlpha", "file": "src/utils.ts", "name": "processAlpha", "type": "function", "line": 1, "exported": true},
-    {"id": "src/utils.ts::transformData", "file": "src/utils.ts", "name": "transformData", "type": "function", "line": 6, "exported": false},
-    {"id": "src/utils.ts::computeBeta", "file": "src/utils.ts", "name": "computeBeta", "type": "function", "line": 10, "exported": false},
-    {"id": "src/utils.ts::calculateGamma", "file": "src/utils.ts", "name": "calculateGamma", "type": "function", "line": 14, "exported": false},
-    {"id": "src/utils.ts::formatDelta", "file": "src/utils.ts", "name": "formatDelta", "type": "variable", "line": 18, "exported": false},
-    {"id": "src/utils.ts::handleEpsilon", "file": "src/utils.ts", "name": "handleEpsilon", "type": "function", "line": 22, "exported": true}
-  ],
-  "edges": [
-    {"from": "src/index.ts::<module>", "to": "src/utils.ts::processAlpha", "type": "call"},
-    {"from": "src/index.ts::<module>", "to": "src/utils.ts::handleEpsilon", "type": "call"},
-    {"from": "src/utils.ts::processAlpha", "to": "src/utils.ts::transformData", "type": "call"},
-    {"from": "src/utils.ts::handleEpsilon", "to": "src/utils.ts::processAlpha", "type": "call"}
-  ],
-  "entry_points": ["src/index.ts::<module>", "src/utils.ts::processAlpha", "src/utils.ts::handleEpsilon"]
-}
-"""
 
-CALL_GRAPH_002 = """{
-  "metadata": {
-    "generated_at": "2025-01-30T12:00:00Z",
-    "language": "python",
-    "task_id": "dead-code-002"
-  },
-  "nodes": [
-    {"id": "app/main.py::<module>", "file": "app/main.py", "name": "<module>", "type": "module", "line": 1, "exported": true},
-    {"id": "app/main.py::main", "file": "app/main.py", "name": "main", "type": "function", "line": 3, "exported": false},
-    {"id": "app/utils.py::process_record", "file": "app/utils.py", "name": "process_record", "type": "function", "line": 1, "exported": true},
-    {"id": "app/utils.py::check_params", "file": "app/utils.py", "name": "check_params", "type": "function", "line": 5, "exported": true},
-    {"id": "app/utils.py::serialize_result", "file": "app/utils.py", "name": "serialize_result", "type": "function", "line": 11, "exported": false},
-    {"id": "app/utils.py::transform_batch", "file": "app/utils.py", "name": "transform_batch", "type": "function", "line": 15, "exported": false},
-    {"id": "app/utils.py::verify_schema", "file": "app/utils.py", "name": "verify_schema", "type": "function", "line": 19, "exported": false},
-    {"id": "app/utils.py::DataCache", "file": "app/utils.py", "name": "DataCache", "type": "class", "line": 23, "exported": false}
-  ],
-  "edges": [
-    {"from": "app/main.py::<module>", "to": "app/main.py::main", "type": "call"},
-    {"from": "app/main.py::main", "to": "app/utils.py::check_params", "type": "call"},
-    {"from": "app/main.py::main", "to": "app/utils.py::process_record", "type": "call"},
-    {"from": "app/utils.py::process_record", "to": "app/utils.py::serialize_result", "type": "call"}
-  ],
-  "entry_points": ["app/main.py::<module>", "app/utils.py::process_record", "app/utils.py::check_params"]
-}
-"""
+def _clone_or_update_corpus(corpus_path: Path | None = None) -> Path:
+    """Clone or update the dead-code-benchmark-corpus repository.
 
-CALL_GRAPH_003 = """{
-  "metadata": {
-    "generated_at": "2025-01-30T12:00:00Z",
-    "language": "javascript",
-    "task_id": "dead-code-003"
-  },
-  "nodes": [
-    {"id": "src/api/routes.js::<module>", "file": "src/api/routes.js", "name": "<module>", "type": "module", "line": 1, "exported": true},
-    {"id": "src/api/handlers.js::handleUser", "file": "src/api/handlers.js", "name": "handleUser", "type": "function", "line": 3, "exported": true},
-    {"id": "src/api/handlers.js::handleAuth", "file": "src/api/handlers.js", "name": "handleAuth", "type": "function", "line": 9, "exported": true},
-    {"id": "src/api/handlers.js::handleMetrics", "file": "src/api/handlers.js", "name": "handleMetrics", "type": "function", "line": 12, "exported": false},
-    {"id": "src/api/handlers.js::handleSession", "file": "src/api/handlers.js", "name": "handleSession", "type": "function", "line": 16, "exported": false},
-    {"id": "src/utils/helpers.js::validateToken", "file": "src/utils/helpers.js", "name": "validateToken", "type": "function", "line": 1, "exported": true},
-    {"id": "src/utils/helpers.js::formatResponse", "file": "src/utils/helpers.js", "name": "formatResponse", "type": "function", "line": 5, "exported": true},
-    {"id": "src/utils/helpers.js::trackEvent", "file": "src/utils/helpers.js", "name": "trackEvent", "type": "function", "line": 9, "exported": false},
-    {"id": "src/utils/helpers.js::buildPayload", "file": "src/utils/helpers.js", "name": "buildPayload", "type": "function", "line": 13, "exported": false},
-    {"id": "src/utils/helpers.js::createHash", "file": "src/utils/helpers.js", "name": "createHash", "type": "function", "line": 17, "exported": false}
-  ],
-  "edges": [
-    {"from": "src/api/routes.js::<module>", "to": "src/api/handlers.js::handleUser", "type": "reference"},
-    {"from": "src/api/routes.js::<module>", "to": "src/api/handlers.js::handleAuth", "type": "reference"},
-    {"from": "src/api/handlers.js::handleUser", "to": "src/utils/helpers.js::validateToken", "type": "call"},
-    {"from": "src/api/handlers.js::handleUser", "to": "src/utils/helpers.js::formatResponse", "type": "call"}
-  ],
-  "entry_points": ["src/api/routes.js::<module>", "src/api/handlers.js::handleUser", "src/api/handlers.js::handleAuth", "src/utils/helpers.js::validateToken", "src/utils/helpers.js::formatResponse"]
-}
-"""
+    Args:
+        corpus_path: Optional path to use. If None, uses DEFAULT_CORPUS_CACHE.
+
+    Returns:
+        Path to the corpus directory.
+    """
+    corpus_dir = corpus_path or DEFAULT_CORPUS_CACHE
+    corpus_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    if corpus_dir.exists() and (corpus_dir / ".git").exists():
+        # Update existing repo
+        subprocess.run(
+            ["git", "pull", "--quiet"],
+            cwd=corpus_dir,
+            capture_output=True,
+            check=False,
+        )
+    else:
+        # Clone fresh
+        if corpus_dir.exists():
+            shutil.rmtree(corpus_dir)
+
+        # Try SSH first, fall back to HTTPS
+        result = subprocess.run(
+            ["git", "clone", "--quiet", CORPUS_REPO, str(corpus_dir)],
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            subprocess.run(
+                ["git", "clone", "--quiet", CORPUS_HTTPS, str(corpus_dir)],
+                capture_output=True,
+                check=True,
+            )
+
+    return corpus_dir
+
+
+def _load_corpus_task(corpus_dir: Path, task_name: str = "typescript-express-app") -> dict[str, Any]:
+    """Load a task from the corpus.
+
+    Args:
+        corpus_dir: Path to the corpus directory.
+        task_name: Name of the task (directory name).
+
+    Returns:
+        Task dictionary with repo_content, dead_code, alive_code.
+    """
+    # Load ground truth
+    ground_truth_path = corpus_dir / ".benchmark" / f"{task_name}.json"
+    if not ground_truth_path.exists():
+        raise FileNotFoundError(f"Ground truth not found: {ground_truth_path}")
+
+    with open(ground_truth_path) as f:
+        ground_truth = json.load(f)
+
+    # Load all source files
+    task_dir = corpus_dir / task_name
+    src_dir = task_dir / "src"
+
+    repo_content: dict[str, str] = {}
+    repo_content["REPORT.json"] = REPORT_PLACEHOLDER
+
+    # Walk all TypeScript files
+    for ts_file in src_dir.rglob("*.ts"):
+        rel_path = ts_file.relative_to(task_dir)
+        repo_content[str(rel_path)] = ts_file.read_text()
+
+    # Include package.json and tsconfig if they exist
+    for config_file in ["package.json", "tsconfig.json"]:
+        config_path = task_dir / config_file
+        if config_path.exists():
+            repo_content[config_file] = config_path.read_text()
+
+    # Load pre-generated dead code analysis separately (only for MCP agent)
+    mcp_only_content: dict[str, str] = {}
+    analysis_path = task_dir / ".supermodel" / "dead-code-analysis.json"
+    if analysis_path.exists():
+        mcp_only_content[".supermodel/dead-code-analysis.json"] = analysis_path.read_text()
+
+    return {
+        "instance_id": ground_truth["metadata"]["task_id"],
+        "language": ground_truth["metadata"]["language"],
+        "difficulty": ground_truth["metadata"].get("difficulty", "hard"),
+        "repo_content": repo_content,
+        "mcp_only_content": mcp_only_content,  # Only written for MCP agent
+        "dead_code": ground_truth["dead_code"],
+        "alive_code": ground_truth["alive_code"],
+        "metadata": ground_truth["metadata"],
+    }
 
 
 class DeadCodeBenchmark:
@@ -102,9 +123,17 @@ class DeadCodeBenchmark:
 
     name = "dead-code"
 
-    def __init__(self, dataset: str | Path = ""):
+    def __init__(self, dataset: str | Path = "", corpus_path: str | Path | None = None):
+        """Initialize the benchmark.
+
+        Args:
+            dataset: Path to a JSON dataset file (legacy, optional).
+            corpus_path: Path to cached corpus directory. If None, uses default cache.
+        """
         self.dataset = dataset
+        self.corpus_path = Path(corpus_path) if corpus_path else None
         self._tasks: list[dict[str, Any]] | None = None
+        self._corpus_dir: Path | None = None
 
     def load_tasks(
         self,
@@ -143,285 +172,26 @@ class DeadCodeBenchmark:
         if self._tasks is not None:
             return self._tasks
 
+        # First check for explicit dataset file
         dataset_path = Path(self.dataset) if self.dataset else None
-
         if dataset_path and dataset_path.exists():
             with open(dataset_path) as f:
                 self._tasks = json.load(f)
-        else:
-            self._tasks = self._generate_synthetic_tasks()
+            return self._tasks
+
+        # Load from corpus repository
+        try:
+            self._corpus_dir = _clone_or_update_corpus(self.corpus_path)
+            task = _load_corpus_task(self._corpus_dir, "typescript-express-app")
+            self._tasks = [task]
+        except Exception as e:
+            # Fall back to error message if corpus unavailable
+            raise RuntimeError(
+                f"Failed to load dead code corpus: {e}\n"
+                "Ensure you have access to the supermodeltools/dead-code-benchmark-corpus repository."
+            ) from e
 
         return self._tasks
-
-    def _generate_synthetic_tasks(self) -> list[dict[str, Any]]:
-        """Generate synthetic dead code detection tasks."""
-        return [
-            {
-                "instance_id": "dead-code-001",
-                "language": "typescript",
-                "difficulty": "easy",
-                "repo_content": {
-                    "REPORT.json": REPORT_PLACEHOLDER,
-                    ".supermodel/graph.json": CALL_GRAPH_001,
-                    "src/utils.ts": """export function processAlpha() {
-  console.log("Processing alpha");
-  transformData();
-}
-
-function transformData() {
-  console.log("Transforming data");
-}
-
-function computeBeta() {
-  console.log("Computing beta");
-}
-
-function calculateGamma(x: number) {
-  return x * 2;
-}
-
-const formatDelta = () => {
-  console.log("Formatting delta");
-};
-
-export function handleEpsilon() {
-  processAlpha();
-}
-""",
-                    "src/index.ts": """import { processAlpha, handleEpsilon } from "./utils";
-
-processAlpha();
-handleEpsilon();
-""",
-                },
-                "dead_code": [
-                    {"file": "src/utils.ts", "name": "computeBeta", "line": 10, "type": "function"},
-                    {
-                        "file": "src/utils.ts",
-                        "name": "calculateGamma",
-                        "line": 14,
-                        "type": "function",
-                    },
-                    {"file": "src/utils.ts", "name": "formatDelta", "line": 18, "type": "variable"},
-                ],
-                "alive_code": [
-                    {"file": "src/utils.ts", "name": "processAlpha", "line": 1, "type": "function"},
-                    {
-                        "file": "src/utils.ts",
-                        "name": "transformData",
-                        "line": 6,
-                        "type": "function",
-                    },
-                    {
-                        "file": "src/utils.ts",
-                        "name": "handleEpsilon",
-                        "line": 22,
-                        "type": "function",
-                    },
-                ],
-            },
-            {
-                "instance_id": "dead-code-002",
-                "language": "python",
-                "difficulty": "medium",
-                "repo_content": {
-                    "REPORT.json": REPORT_PLACEHOLDER,
-                    ".supermodel/graph.json": CALL_GRAPH_002,
-                    "app/main.py": """from app.utils import process_record, check_params
-
-def main():
-    data = check_params({"key": "value"})
-    result = process_record(data)
-    print(result)
-
-if __name__ == "__main__":
-    main()
-""",
-                    "app/utils.py": '''def process_record(data: dict) -> str:
-    """Process the input record."""
-    return serialize_result(data)
-
-def check_params(data: dict) -> dict:
-    """Check input parameters."""
-    if not isinstance(data, dict):
-        raise ValueError("Expected dict")
-    return data
-
-def serialize_result(data: dict) -> str:
-    """Serialize data for output."""
-    return str(data)
-
-def transform_batch(data):
-    """Transform a batch of records."""
-    return data
-
-def verify_schema(data):
-    """Verify data matches schema."""
-    return bool(data)
-
-class DataCache:
-    """Cache for processed data."""
-    def __init__(self):
-        self.value = 0
-
-    def compute(self):
-        return self.value * 2
-''',
-                    "app/__init__.py": "",
-                },
-                "dead_code": [
-                    {
-                        "file": "app/utils.py",
-                        "name": "transform_batch",
-                        "line": 15,
-                        "type": "function",
-                    },
-                    {
-                        "file": "app/utils.py",
-                        "name": "verify_schema",
-                        "line": 19,
-                        "type": "function",
-                    },
-                    {"file": "app/utils.py", "name": "DataCache", "line": 23, "type": "class"},
-                ],
-                "alive_code": [
-                    {"file": "app/utils.py", "name": "process_record", "line": 1, "type": "function"},
-                    {
-                        "file": "app/utils.py",
-                        "name": "check_params",
-                        "line": 5,
-                        "type": "function",
-                    },
-                    {
-                        "file": "app/utils.py",
-                        "name": "serialize_result",
-                        "line": 11,
-                        "type": "function",
-                    },
-                ],
-            },
-            {
-                "instance_id": "dead-code-003",
-                "language": "javascript",
-                "difficulty": "hard",
-                "repo_content": {
-                    "REPORT.json": REPORT_PLACEHOLDER,
-                    ".supermodel/graph.json": CALL_GRAPH_003,
-                    "src/api/routes.js": """const { handleUser, handleAuth } = require('./handlers');
-
-module.exports = {
-  routes: [
-    { path: '/user', handler: handleUser },
-    { path: '/auth', handler: handleAuth },
-  ]
-};
-""",
-                    "src/api/handlers.js": """const { validateToken, formatResponse } = require('../utils/helpers');
-
-function handleUser(req, res) {
-  const valid = validateToken(req.headers.token);
-  if (!valid) return res.status(401).send('Unauthorized');
-  return res.json(formatResponse({ user: 'data' }));
-}
-
-function handleAuth(req, res) {
-  return res.json({ authenticated: true });
-}
-
-function handleMetrics(req, res) {
-  return res.json({ metrics: true });
-}
-
-function handleSession(req, res) {
-  console.log('Session handler');
-  return res.status(410).send('Gone');
-}
-
-module.exports = { handleUser, handleAuth };
-""",
-                    "src/utils/helpers.js": """function validateToken(token) {
-  return token && token.length > 0;
-}
-
-function formatResponse(data) {
-  return { success: true, data };
-}
-
-function trackEvent(req) {
-  console.log(req.url);
-}
-
-function buildPayload(data) {
-  return { result: data };
-}
-
-function createHash() {
-  return Math.random().toString(36);
-}
-
-module.exports = { validateToken, formatResponse };
-""",
-                },
-                "dead_code": [
-                    {
-                        "file": "src/api/handlers.js",
-                        "name": "handleMetrics",
-                        "line": 12,
-                        "type": "function",
-                    },
-                    {
-                        "file": "src/api/handlers.js",
-                        "name": "handleSession",
-                        "line": 16,
-                        "type": "function",
-                    },
-                    {
-                        "file": "src/utils/helpers.js",
-                        "name": "trackEvent",
-                        "line": 9,
-                        "type": "function",
-                    },
-                    {
-                        "file": "src/utils/helpers.js",
-                        "name": "buildPayload",
-                        "line": 13,
-                        "type": "function",
-                    },
-                    {
-                        "file": "src/utils/helpers.js",
-                        "name": "createHash",
-                        "line": 17,
-                        "type": "function",
-                    },
-                ],
-                "alive_code": [
-                    {
-                        "file": "src/api/handlers.js",
-                        "name": "handleUser",
-                        "line": 3,
-                        "type": "function",
-                    },
-                    {
-                        "file": "src/api/handlers.js",
-                        "name": "handleAuth",
-                        "line": 9,
-                        "type": "function",
-                    },
-                    {
-                        "file": "src/utils/helpers.js",
-                        "name": "validateToken",
-                        "line": 1,
-                        "type": "function",
-                    },
-                    {
-                        "file": "src/utils/helpers.js",
-                        "name": "formatResponse",
-                        "line": 5,
-                        "type": "function",
-                    },
-                ],
-            },
-        ]
 
     def normalize_task(self, task: dict[str, Any]) -> BenchmarkTask:
         instance_id = task.get("instance_id", "unknown")
@@ -443,26 +213,42 @@ module.exports = { validateToken, formatResponse };
     def _generate_problem_statement(self, task: dict[str, Any]) -> str:
         instance_id = task.get("instance_id", "unknown")
         language = task.get("language", "unknown")
-        files = [f for f in task.get("repo_content", {}).keys() if f != "REPORT.json"]
+        metadata = task.get("metadata", {})
+        total_files = metadata.get("total_files", len(task.get("repo_content", {})))
+        dead_count = metadata.get("dead_functions", len(task.get("dead_code", [])))
+
+        # List files (excluding config files for cleaner output)
+        files = [
+            f
+            for f in task.get("repo_content", {}).keys()
+            if f not in ("REPORT.json", "package.json", "tsconfig.json")
+            and not f.startswith(".supermodel/")
+        ]
 
         return f"""Find all dead code in this {language} codebase.
 
 Task: {instance_id}
-Files to analyze: {", ".join(files)}
+Total files: {total_files}
+Approximate dead functions: {dead_count}
+
+Source files to analyze:
+{chr(10).join(f"  - {f}" for f in sorted(files)[:20])}
+{f"  ... and {len(files) - 20} more files" if len(files) > 20 else ""}
 
 INSTRUCTIONS:
 1. Read all source files in the workspace
-2. Identify entry points (exported functions, main modules)
-3. Trace which functions are actually called
-4. Find functions/classes that are NEVER called
+2. Identify entry points (exported functions, route handlers, main modules)
+3. Trace the call graph to find which functions are actually reachable
+4. Find functions/classes/variables that are NEVER called or referenced
 
 CRITICAL: Update the existing REPORT.json file with your findings.
 Format: a JSON object with "dead_code" array containing objects with file, name, line, and type fields.
 Set "analysis_complete" to true when done.
 
 Rules:
-- Exported functions are NOT dead (they are entry points)
-- Functions called by live code are NOT dead
+- Exported functions that are used by routes ARE alive (they are entry points)
+- Functions called transitively from entry points are NOT dead
+- Functions that are only referenced in comments/strings ARE dead
 - Only mark truly unreachable code as dead
 """
 
@@ -470,11 +256,11 @@ Rules:
         self,
         task: dict[str, Any],
         docker_manager: DockerEnvironmentManager,
+        is_mcp: bool = False,
     ) -> TaskEnvironment:
-        import subprocess
-
         instance_id = task.get("instance_id", "unknown")
         repo_content = task.get("repo_content", {})
+        mcp_only_content = task.get("mcp_only_content", {})
 
         await docker_manager._ensure_fallback_image()
         image_name = docker_manager.FALLBACK_IMAGE
@@ -488,6 +274,13 @@ Rules:
             full_path = Path(host_workdir) / file_path
             full_path.parent.mkdir(parents=True, exist_ok=True)
             full_path.write_text(content)
+
+        # Write MCP-only files (e.g., pre-computed analysis) only for MCP agent
+        if is_mcp:
+            for file_path, content in mcp_only_content.items():
+                full_path = Path(host_workdir) / file_path
+                full_path.parent.mkdir(parents=True, exist_ok=True)
+                full_path.write_text(content)
 
         container_name = f"mcpbr-{docker_manager._session_id}-{instance_id}"
         container_workdir = "/workspace"
@@ -583,6 +376,19 @@ Rules:
         f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
 
         resolved = precision >= 0.8 and recall >= 0.8
+
+        # Log results for visibility
+        print(f"\n{'='*50}")
+        print(f"DEAD CODE EVALUATION - {env.instance_id}")
+        print(f"  Found: {len(agent_findings)} items")
+        print(f"  Expected: {len(expected_dead)} dead functions")
+        print(f"  True Positives: {tp}")
+        print(f"  False Positives: {fp}")
+        print(f"  False Negatives: {fn}")
+        print(f"  Precision: {precision*100:.1f}%")
+        print(f"  Recall: {recall*100:.1f}%")
+        print(f"  F1 Score: {f1*100:.1f}%")
+        print(f"{'='*50}\n")
 
         return {
             "resolved": resolved,

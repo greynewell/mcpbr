@@ -291,34 +291,63 @@ class AzureProvider(InfrastructureProvider):
             raise RuntimeError(f"SSH command failed: {e}") from e
 
     async def _install_dependencies(self) -> None:
-        """Install Docker, Python, and mcpbr on VM."""
+        """Install Docker, Python, Node.js, and mcpbr on VM."""
         console = Console()
-        console.print("[cyan]Installing dependencies on VM...[/cyan]")
+        py_ver = self.azure_config.python_version
 
-        # Update apt cache
-        install_cmd = (
+        # Step 1: System packages + Docker
+        console.print("[cyan]Installing system packages and Docker...[/cyan]")
+        step1_cmd = (
+            "export DEBIAN_FRONTEND=noninteractive && "
             "sudo apt-get update -qq && "
-            "sudo apt-get install -y -qq curl python3-pip && "
-            # Install Docker
+            "sudo apt-get install -y -qq curl software-properties-common && "
             "curl -fsSL https://get.docker.com -o get-docker.sh && "
             "sudo sh get-docker.sh && "
-            "sudo usermod -aG docker $USER && "
-            # Install Python version
-            f"sudo apt-get install -y python{self.azure_config.python_version} python{self.azure_config.python_version}-venv && "
-            # Install mcpbr
-            "pip3 install mcpbr"
+            "sudo usermod -aG docker $USER"
         )
-
-        exit_code, _stdout, stderr = await self._ssh_exec(install_cmd, timeout=600)
-
-        # Don't fail hard on installation issues - log and continue
+        exit_code, _stdout, stderr = await self._ssh_exec(step1_cmd, timeout=600)
         if exit_code != 0:
             console.print(
-                f"[yellow]⚠ Some installations may have issues (exit code {exit_code})[/yellow]"
+                f"[yellow]⚠ System packages/Docker install issues: {stderr[:300]}[/yellow]"
             )
-            console.print(f"[dim]{stderr[:500]}[/dim]")
         else:
-            console.print("[green]✓ Dependencies installed[/green]")
+            console.print("[green]✓ Docker installed[/green]")
+
+        # Step 2: Python (from deadsnakes PPA if needed)
+        console.print(f"[cyan]Installing Python {py_ver}...[/cyan]")
+        step2_cmd = (
+            "export DEBIAN_FRONTEND=noninteractive && "
+            f"sudo add-apt-repository -y ppa:deadsnakes/ppa && "
+            "sudo apt-get update -qq && "
+            f"sudo apt-get install -y -qq python{py_ver} python{py_ver}-venv python{py_ver}-distutils && "
+            f"curl -sS https://bootstrap.pypa.io/get-pip.py | sudo python{py_ver}"
+        )
+        exit_code, _stdout, stderr = await self._ssh_exec(step2_cmd, timeout=300)
+        if exit_code != 0:
+            console.print(f"[yellow]⚠ Python install issues: {stderr[:300]}[/yellow]")
+        else:
+            console.print(f"[green]✓ Python {py_ver} installed[/green]")
+
+        # Step 3: Node.js (for npx / MCP servers)
+        console.print("[cyan]Installing Node.js...[/cyan]")
+        step3_cmd = (
+            "curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && "
+            "sudo apt-get install -y -qq nodejs"
+        )
+        exit_code, _stdout, stderr = await self._ssh_exec(step3_cmd, timeout=300)
+        if exit_code != 0:
+            console.print(f"[yellow]⚠ Node.js install issues: {stderr[:300]}[/yellow]")
+        else:
+            console.print("[green]✓ Node.js installed[/green]")
+
+        # Step 4: Install mcpbr
+        console.print("[cyan]Installing mcpbr...[/cyan]")
+        step4_cmd = f"python{py_ver} -m pip install mcpbr"
+        exit_code, _stdout, stderr = await self._ssh_exec(step4_cmd, timeout=300)
+        if exit_code != 0:
+            console.print(f"[yellow]⚠ mcpbr install issues: {stderr[:300]}[/yellow]")
+        else:
+            console.print("[green]✓ mcpbr installed[/green]")
 
     async def _transfer_config(self) -> None:
         """Transfer configuration file to VM via SFTP."""
@@ -376,13 +405,18 @@ class AzureProvider(InfrastructureProvider):
 
         console.print(f"[green]✓ Exported {len(env_vars)} environment variables[/green]")
 
+    def _mcpbr_cmd(self) -> str:
+        """Return the mcpbr command for the configured Python version."""
+        py_ver = self.azure_config.python_version
+        return f"python{py_ver} -m mcpbr"
+
     async def _run_test_task(self) -> None:
         """Run single test task to validate setup."""
         console = Console()
         console.print("[cyan]Running test task to validate setup...[/cyan]")
 
         # Run mcpbr with sample_size=1, max_concurrent=1
-        test_cmd = "mcpbr run -c ~/config.yaml -M -n 1"
+        test_cmd = f"source ~/.bashrc 2>/dev/null; {self._mcpbr_cmd()} run -c ~/config.yaml -M -n 1"
 
         exit_code, stdout, stderr = await self._ssh_exec(test_cmd, timeout=600)
 
@@ -475,10 +509,11 @@ class AzureProvider(InfrastructureProvider):
             flags.append("-B")
 
         # Execute mcpbr
-        cmd = f"mcpbr run -c ~/config.yaml {' '.join(flags)}"
+        cmd = f"{self._mcpbr_cmd()} run -c ~/config.yaml {' '.join(flags)}"
         console.print(f"[dim]Running: {cmd}[/dim]")
 
-        # Execute with streaming output
+        # Source environment and execute with streaming output
+        cmd = f"source ~/.bashrc 2>/dev/null; {cmd}"
         _stdin, stdout, stderr = self.ssh_client.exec_command(cmd)
 
         # Stream output line by line

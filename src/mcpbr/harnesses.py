@@ -452,9 +452,10 @@ DEFAULT_PROMPT = (
 )
 
 MCP_PROMPT_SUFFIX = (
-    "\n\nYou have access to an MCP server with additional tools. "
-    "Consider using the MCP tools (prefixed with mcp__) when they would "
-    "help you understand or navigate the codebase more effectively."
+    "\n\nYou have access to an MCP server with additional tools for codebase analysis. "
+    "Use these tools to understand the codebase structure, find definitions, trace call chains, "
+    "and navigate dependencies before making changes. The MCP tools are especially useful for "
+    "understanding how code is connected across files."
 )
 
 
@@ -594,25 +595,27 @@ class ClaudeCodeHarness:
         instance_id = task_id or task.get("instance_id", "unknown")
 
         mcp_server_name = None
+        mcp_json_path = None
         if self.mcp_server:
             mcp_server_name = self.mcp_server.name
             args = self.mcp_server.get_args_for_workdir(workdir)
             mcp_env = self.mcp_server.get_expanded_env()
-            add_cmd = [
-                "claude",
-                "mcp",
-                "add",
-                mcp_server_name,
-                "--",
-                self.mcp_server.command,
-            ] + args
-            exit_code, stdout, stderr = await _run_cli_command(
-                add_cmd, workdir, timeout=30, env=mcp_env
-            )
-            if exit_code != 0:
-                self._console.print(
-                    f"[yellow]Warning: MCP server add failed (exit {exit_code}): {stderr or stdout}[/yellow]"
-                )
+
+            # Write .mcp.json file for Claude Code to discover MCP tools.
+            # This is more reliable than `claude mcp add` which can create broken
+            # tool registrations where the server connects but tools aren't routable.
+            mcp_config = {
+                "mcpServers": {
+                    mcp_server_name: {
+                        "type": "stdio",
+                        "command": self.mcp_server.command,
+                        "args": args,
+                        "env": mcp_env,
+                    }
+                }
+            }
+            mcp_json_path = os.path.join(workdir, ".mcp.json")
+            Path(mcp_json_path).write_text(json.dumps(mcp_config, indent=2))
 
         try:
             command = [
@@ -683,12 +686,8 @@ class ClaudeCodeHarness:
 
             if exit_code != 0:
                 error_msg = stderr or "Unknown error"
-                if mcp_server_name:
-                    await _run_cli_command(
-                        ["claude", "mcp", "remove", mcp_server_name],
-                        workdir,
-                        timeout=10,
-                    )
+                if mcp_json_path and os.path.exists(mcp_json_path):
+                    os.remove(mcp_json_path)
                 return AgentResult(
                     patch="",
                     success=False,
@@ -705,12 +704,8 @@ class ClaudeCodeHarness:
                     cost_usd=cost_usd,
                 )
 
-            if mcp_server_name:
-                await _run_cli_command(
-                    ["claude", "mcp", "remove", mcp_server_name],
-                    workdir,
-                    timeout=10,
-                )
+            if mcp_json_path and os.path.exists(mcp_json_path):
+                os.remove(mcp_json_path)
 
             # Check git status to understand what happened
             git_exit, git_status, git_stderr = await _run_cli_command(
@@ -747,12 +742,8 @@ class ClaudeCodeHarness:
                 cost_usd=cost_usd,
             )
         except Exception:
-            if mcp_server_name:
-                await _run_cli_command(
-                    ["claude", "mcp", "remove", mcp_server_name],
-                    workdir,
-                    timeout=10,
-                )
+            if mcp_json_path and os.path.exists(mcp_json_path):
+                os.remove(mcp_json_path)
             raise
 
     async def _solve_in_docker(
@@ -846,37 +837,36 @@ class ClaudeCodeHarness:
                 self._console.print(f"[cyan]Registering MCP server: {mcp_server_name}[/cyan]")
                 self._console.print(f"[dim]  Command: {self.mcp_server.command} {args_str}[/dim]")
 
-            # Register MCP server separately with its own timeout
-            # Use shlex.quote() to prevent shell injection and handle spaces/special characters
-            quoted_workdir = shlex.quote(env.workdir)
-            quoted_env_file = shlex.quote(env_file)
-            quoted_server_name = shlex.quote(mcp_server_name)
-            quoted_command = shlex.quote(self.mcp_server.command)
-            quoted_args = " ".join(shlex.quote(arg) for arg in args)
-
-            mcp_add_cmd = [
-                "/bin/bash",
-                "-c",
-                f"cd {quoted_workdir} && su mcpbr -c 'source {quoted_env_file} && cd {quoted_workdir} && claude mcp add {quoted_server_name} -- {quoted_command} {quoted_args}'",
-            ]
+            # Write .mcp.json to workdir for Claude Code to discover MCP tools.
+            # File-based config is more reliable than `claude mcp add` which can create
+            # broken tool registrations where the server connects but tools aren't routable.
+            mcp_config = {
+                "mcpServers": {
+                    mcp_server_name: {
+                        "type": "stdio",
+                        "command": self.mcp_server.command,
+                        "args": args,
+                        "env": self.mcp_server.get_expanded_env(),
+                    }
+                }
+            }
+            mcp_json_content = json.dumps(mcp_config, indent=2)
+            mcp_json_path = f"{env.workdir}/.mcp.json"
 
             try:
                 mcp_exit_code, mcp_stdout, mcp_stderr = await env.exec_command(
-                    mcp_add_cmd,
-                    timeout=60,  # Separate 60s timeout for MCP registration
-                    environment=docker_env,
+                    f"cat > {mcp_json_path} << 'MCP_JSON_EOF'\n{mcp_json_content}\nMCP_JSON_EOF",
+                    timeout=10,
                 )
+                await env.exec_command(f"chown mcpbr:mcpbr {mcp_json_path}", timeout=5)
 
                 if mcp_exit_code != 0:
-                    error_msg = f"MCP server registration failed (exit {mcp_exit_code})"
+                    error_msg = f"MCP config write failed (exit {mcp_exit_code})"
                     if mcp_stderr:
                         error_msg += f": {mcp_stderr}"
-                    if mcp_stdout:
-                        error_msg += f"\nStdout: {mcp_stdout}"
                     if verbose:
                         self._console.print(f"[red]✗ {error_msg}[/red]")
 
-                    # Clean up temp files before early return
                     await env.exec_command(f"rm -f {prompt_file} {env_file}", timeout=5)
 
                     return AgentResult(
@@ -889,16 +879,13 @@ class ClaudeCodeHarness:
                     )
 
                 if verbose:
-                    self._console.print("[green]✓ MCP server registered successfully[/green]")
-                    if mcp_stdout.strip():
-                        self._console.print(f"[dim]{mcp_stdout.strip()}[/dim]")
+                    self._console.print("[green]✓ MCP server configured via .mcp.json[/green]")
 
             except asyncio.TimeoutError:
-                error_msg = "MCP server registration timed out after 60s. The MCP server may have failed to start or is hanging during initialization."
+                error_msg = "Failed to write MCP configuration file."
                 if verbose:
                     self._console.print(f"[red]✗ {error_msg}[/red]")
 
-                # Clean up temp files before early return
                 await env.exec_command(f"rm -f {prompt_file} {env_file}", timeout=5)
 
                 return AgentResult(
@@ -1039,16 +1026,9 @@ class ClaudeCodeHarness:
                             error_msg += f"\nMCP server logs saved to: {mcp_log_path}"
 
                 if mcp_server_name:
-                    # Use shlex.quote() for MCP removal command
-                    quoted_env_file = shlex.quote(env_file)
-                    quoted_server_name = shlex.quote(mcp_server_name)
-                    remove_cmd = (
-                        f"source {quoted_env_file} && claude mcp remove {quoted_server_name}"
-                    )
                     await env.exec_command(
-                        f"su mcpbr -c {shlex.quote(remove_cmd)}",
-                        timeout=10,
-                        environment=docker_env,
+                        f"rm -f {env.workdir}/.mcp.json",
+                        timeout=5,
                     )
 
                 return AgentResult(
@@ -1068,14 +1048,9 @@ class ClaudeCodeHarness:
                 )
 
             if mcp_server_name:
-                # Use shlex.quote() for MCP removal command
-                quoted_env_file = shlex.quote(env_file)
-                quoted_server_name = shlex.quote(mcp_server_name)
-                remove_cmd = f"source {quoted_env_file} && claude mcp remove {quoted_server_name}"
                 await env.exec_command(
-                    f"su mcpbr -c {shlex.quote(remove_cmd)}",
-                    timeout=10,
-                    environment=docker_env,
+                    f"rm -f {env.workdir}/.mcp.json",
+                    timeout=5,
                 )
 
             _, git_status, git_stderr = await env.exec_command(
@@ -1160,20 +1135,13 @@ class ClaudeCodeHarness:
 
             if mcp_server_name:
                 try:
-                    # Use shlex.quote() for MCP removal command
-                    quoted_env_file = shlex.quote(env_file)
-                    quoted_server_name = shlex.quote(mcp_server_name)
-                    remove_cmd = (
-                        f"source {quoted_env_file} && claude mcp remove {quoted_server_name}"
-                    )
                     await env.exec_command(
-                        f"su mcpbr -c {shlex.quote(remove_cmd)}",
-                        timeout=10,
-                        environment=docker_env,
+                        f"rm -f {env.workdir}/.mcp.json",
+                        timeout=5,
                     )
                 except Exception as e:
                     if verbose:
-                        self._console.print(f"[dim red]Failed to remove MCP server: {e}[/dim red]")
+                        self._console.print(f"[dim red]Failed to clean up .mcp.json: {e}[/dim red]")
 
             error_msg = f"Task execution timed out after {timeout}s."
             if self.mcp_server:
@@ -1204,20 +1172,13 @@ class ClaudeCodeHarness:
         except Exception:
             if mcp_server_name:
                 try:
-                    # Use shlex.quote() for MCP removal command
-                    quoted_env_file = shlex.quote(env_file)
-                    quoted_server_name = shlex.quote(mcp_server_name)
-                    remove_cmd = (
-                        f"source {quoted_env_file} && claude mcp remove {quoted_server_name}"
-                    )
                     await env.exec_command(
-                        f"su mcpbr -c {shlex.quote(remove_cmd)}",
-                        timeout=10,
-                        environment=docker_env,
+                        f"rm -f {env.workdir}/.mcp.json",
+                        timeout=5,
                     )
                 except Exception as e:
                     if verbose:
-                        self._console.print(f"[dim red]Failed to remove MCP server: {e}[/dim red]")
+                        self._console.print(f"[dim red]Failed to clean up .mcp.json: {e}[/dim red]")
             raise
         finally:
             # Close MCP log file if it was opened
@@ -1230,7 +1191,9 @@ class ClaudeCodeHarness:
                     if verbose:
                         self._console.print(f"[dim red]Failed to close MCP log file: {e}[/dim red]")
 
-            await env.exec_command(f"rm -f {prompt_file} {env_file}", timeout=5)
+            await env.exec_command(
+                f"rm -f {prompt_file} {env_file} {env.workdir}/.mcp.json", timeout=5
+            )
 
 
 HARNESS_REGISTRY: dict[str, type] = {

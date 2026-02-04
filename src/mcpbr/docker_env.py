@@ -314,14 +314,18 @@ class DockerEnvironmentManager:
     FALLBACK_IMAGE = "mcpbr-env"
     DOCKERFILE_PATH = Path(__file__).parent.parent.parent / "Dockerfile"
 
-    def __init__(self, use_prebuilt: bool = True) -> None:
+    def __init__(
+        self, use_prebuilt: bool = True, extra_volumes: dict[str, str] | None = None
+    ) -> None:
         """Initialize the Docker environment manager.
 
         Args:
             use_prebuilt: If True, try to use pre-built SWE-bench images first.
+            extra_volumes: Additional read-only volume mounts (host_path -> container_path).
         """
         self.client = docker.from_env()
         self.use_prebuilt = use_prebuilt
+        self._extra_volumes = extra_volumes or {}
         self._fallback_image_built = False
         self._temp_dirs: list[tempfile.TemporaryDirectory[str]] = []
         self._containers: list[Container] = []
@@ -488,6 +492,15 @@ CMD ["/bin/bash"]
 
             for attempt in range(max_retries + 1):
                 try:
+                    volumes_dict: dict[str, dict[str, str]] = {
+                        host_workdir: {"bind": "/workspace", "mode": "rw"},
+                    }
+                    for host_path, container_path in self._extra_volumes.items():
+                        volumes_dict[os.path.abspath(host_path)] = {
+                            "bind": container_path,
+                            "mode": "rw",
+                        }
+
                     container = self.client.containers.run(
                         image_name,
                         command="tail -f /dev/null",
@@ -495,9 +508,7 @@ CMD ["/bin/bash"]
                         detach=True,
                         platform="linux/amd64" if uses_prebuilt else None,
                         network_mode="bridge",  # Enable network for API calls
-                        volumes={
-                            host_workdir: {"bind": "/workspace", "mode": "rw"},
-                        },
+                        volumes=volumes_dict,
                         working_dir=container_workdir,
                         remove=False,
                         labels={

@@ -109,6 +109,16 @@ class MCPServerConfig(BaseModel):
         default=900000,
         description="Timeout in milliseconds for MCP tool execution (default: 15 min for long-running tools)",
     )
+    setup_command: str | None = Field(
+        default=None,
+        description="Shell command to run inside the container BEFORE the agent starts. "
+        "Runs outside the task timer (does not count against timeout_seconds). "
+        "Use {workdir} as placeholder. Useful for pre-computing caches.",
+    )
+    setup_timeout_ms: int = Field(
+        default=900000,
+        description="Timeout in milliseconds for the setup_command (default: 15 min)",
+    )
 
     def get_args_for_workdir(self, workdir: str) -> list[str]:
         """Replace {workdir} placeholder in args with actual path."""
@@ -116,6 +126,12 @@ class MCPServerConfig(BaseModel):
         for arg in self.args:
             result.append(arg.replace("{workdir}", workdir))
         return result
+
+    def get_setup_command_for_workdir(self, workdir: str) -> str | None:
+        """Replace {workdir} placeholder in setup_command with actual path."""
+        if self.setup_command is None:
+            return None
+        return self.setup_command.replace("{workdir}", workdir)
 
     def get_expanded_env(self) -> dict[str, str]:
         """Expand ${VAR} references in env values using os.environ.
@@ -398,6 +414,12 @@ class HarnessConfig(BaseModel):
     enable_profiling: bool = Field(
         default=False,
         description="Enable comprehensive performance profiling (tool latency, memory, overhead)",
+    )
+
+    volumes: dict[str, str] = Field(
+        default_factory=dict,
+        description="Additional read-only volume mounts for Docker containers (host_path: container_path). "
+        "Mounted into every container, persists across tasks. Useful for pre-computed caches.",
     )
 
     infrastructure: InfrastructureConfig = Field(

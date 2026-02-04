@@ -895,6 +895,35 @@ class ClaudeCodeHarness:
                     cost_usd=None,
                 )
 
+        # Run setup_command if configured (BEFORE agent, OUTSIDE task timer).
+        # This is the right place for expensive one-time operations like
+        # pre-computing caches that should not count against timeout_seconds.
+        if self.mcp_server and self.mcp_server.setup_command:
+            setup_cmd = self.mcp_server.get_setup_command_for_workdir(env.workdir)
+            setup_timeout = self.mcp_server.setup_timeout_ms / 1000
+
+            if verbose:
+                self._console.print(
+                    f"[cyan]Running setup command (timeout: {setup_timeout:.0f}s)...[/cyan]"
+                )
+
+            setup_full_cmd = f"source {shlex.quote(env_file)} && {setup_cmd}"
+            setup_exit, setup_stdout, setup_stderr = await env.exec_command(
+                ["/bin/bash", "-c", setup_full_cmd],
+                timeout=setup_timeout,
+            )
+
+            if setup_exit != 0:
+                if verbose:
+                    self._console.print(
+                        f"[yellow]⚠ Setup command exited with code {setup_exit}[/yellow]"
+                    )
+                    if setup_stderr:
+                        self._console.print(f"[dim]{setup_stderr[:500]}[/dim]")
+                # Non-fatal: continue with agent even if setup fails
+            elif verbose:
+                self._console.print("[green]✓ Setup command completed[/green]")
+
         try:
             claude_args = [
                 "--print",

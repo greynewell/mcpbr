@@ -962,7 +962,10 @@ async def run_evaluation(
                 "args": config.mcp_server.args if config.mcp_server else [],
             }
 
-    docker_manager = DockerEnvironmentManager(use_prebuilt=config.use_prebuilt_images)
+    docker_manager = DockerEnvironmentManager(
+        use_prebuilt=config.use_prebuilt_images,
+        extra_volumes=config.volumes,
+    )
 
     results: list[TaskResult] = []
     # Add cached results if using state tracker

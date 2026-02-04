@@ -58,6 +58,7 @@ mcp_server:
             mock_config.output_dir = None
             mock_config.use_prebuilt_images = True
             mock_config.budget = None
+            mock_config.infrastructure = None
             mock_load_config.return_value = mock_config
 
             # Mock run_evaluation to capture the state_tracker parameter
@@ -106,6 +107,7 @@ mcp_server:
             mock_config.output_dir = None
             mock_config.use_prebuilt_images = True
             mock_config.budget = None
+            mock_config.infrastructure = None
             mock_load_config.return_value = mock_config
 
             # Mock run_evaluation
@@ -151,6 +153,7 @@ mcp_server:
             mock_config.output_dir = None
             mock_config.use_prebuilt_images = True
             mock_config.budget = None
+            mock_config.infrastructure = None
             mock_load_config.return_value = mock_config
 
             # Mock run_evaluation
@@ -201,6 +204,7 @@ mcp_server:
             mock_config.output_dir = None
             mock_config.use_prebuilt_images = True
             mock_config.budget = None
+            mock_config.infrastructure = None
             mock_load_config.return_value = mock_config
 
             # Mock run_evaluation
@@ -252,6 +256,7 @@ mcp_server:
             mock_config.output_dir = None
             mock_config.use_prebuilt_images = True
             mock_config.budget = None
+            mock_config.infrastructure = None
             mock_load_config.return_value = mock_config
 
             # Mock run_evaluation
@@ -304,6 +309,7 @@ mcp_server:
             mock_config.output_dir = None
             mock_config.use_prebuilt_images = True
             mock_config.budget = None
+            mock_config.infrastructure = None
             mock_load_config.return_value = mock_config
 
             # Mock run_evaluation

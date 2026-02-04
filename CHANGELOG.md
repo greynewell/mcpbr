@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Repository-aware test commands for non-pytest projects** (#365): Use upstream SWE-bench test command specs for sympy (`bin/test`), sphinx (`tox`), and other non-pytest repos instead of defaulting to `python -m pytest`
+- **Flaky Azure and trial mode tests**: Fixed tests that depended on local `~/.ssh/mcpbr_azure` state and updated assertions for multi-step dependency installation
 - **SEO improvements** for documentation site
   - Added robots.txt with sitemap reference
   - Added Open Graph and Twitter Card meta tags on all pages

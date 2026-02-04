@@ -155,11 +155,15 @@ class TestVMProvisioning:
         mock_time: MagicMock,
         mock_run: MagicMock,
         azure_provider: AzureProvider,
+        tmp_path: Path,
     ) -> None:
         """Test successful VM creation."""
-        # Mock ssh-keygen, resource group show (exists), vm create
+        # Use existing SSH key to avoid depending on ~/.ssh/mcpbr_azure state
+        ssh_key = tmp_path / "test_key"
+        ssh_key.touch()
+        azure_provider.azure_config.ssh_key_path = ssh_key
+
         mock_run.side_effect = [
-            Mock(returncode=0),  # ssh-keygen
             Mock(returncode=0, stdout='{"id": "rg-id"}'),  # az group show (exists)
             Mock(returncode=0, stdout='{"id": "vm-id"}'),  # az vm create
         ]
@@ -179,11 +183,15 @@ class TestVMProvisioning:
         mock_time: MagicMock,
         mock_run: MagicMock,
         azure_provider: AzureProvider,
+        tmp_path: Path,
     ) -> None:
         """Test VM creation with resource group creation."""
-        # Mock resource group doesn't exist, then create it
+        # Use existing SSH key to avoid depending on ~/.ssh/mcpbr_azure state
+        ssh_key = tmp_path / "test_key"
+        ssh_key.touch()
+        azure_provider.azure_config.ssh_key_path = ssh_key
+
         mock_run.side_effect = [
-            Mock(returncode=0),  # ssh-keygen
             Mock(returncode=1, stderr="ResourceGroupNotFound"),  # az group show (not found)
             Mock(returncode=0),  # az group create
             Mock(returncode=0, stdout='{"id": "vm-id"}'),  # az vm create
@@ -198,16 +206,19 @@ class TestVMProvisioning:
         self,
         mock_run: MagicMock,
         azure_provider: AzureProvider,
+        tmp_path: Path,
     ) -> None:
         """Test VM creation with SSH key generation."""
-        # Mock ssh-keygen, resource group show, and vm creation
-        mock_run.side_effect = [
-            Mock(returncode=0),  # ssh-keygen
-            Mock(returncode=0, stdout='{"id": "rg-id"}'),  # az group show
-            Mock(returncode=0, stdout='{"id": "vm-id"}'),  # az vm create
-        ]
+        # Redirect Path.home to tmp_path so ~/.ssh/mcpbr_azure doesn't exist
+        with patch("mcpbr.infrastructure.azure.Path.home", return_value=tmp_path):
+            # Mock ssh-keygen, resource group show, and vm creation
+            mock_run.side_effect = [
+                Mock(returncode=0),  # ssh-keygen
+                Mock(returncode=0, stdout='{"id": "rg-id"}'),  # az group show
+                Mock(returncode=0, stdout='{"id": "vm-id"}'),  # az vm create
+            ]
 
-        await azure_provider._create_vm("Standard_D8s_v3")
+            await azure_provider._create_vm("Standard_D8s_v3")
 
         # Verify ssh-keygen was called
         ssh_keygen_call = mock_run.call_args_list[0]
@@ -218,11 +229,15 @@ class TestVMProvisioning:
         self,
         mock_run: MagicMock,
         azure_provider: AzureProvider,
+        tmp_path: Path,
     ) -> None:
         """Test VM creation failure (quota exceeded)."""
-        # Mock ssh-keygen success, resource group show, VM creation failure
+        # Use existing SSH key to avoid depending on ~/.ssh/mcpbr_azure state
+        ssh_key = tmp_path / "test_key"
+        ssh_key.touch()
+        azure_provider.azure_config.ssh_key_path = ssh_key
+
         mock_run.side_effect = [
-            Mock(returncode=0),  # ssh-keygen
             Mock(returncode=0, stdout='{"id": "rg-id"}'),  # az group show
             Mock(returncode=1, stderr="QuotaExceeded: Core quota exceeded"),  # az vm create
         ]
@@ -577,13 +592,18 @@ class TestSetup:
         mock_ssh_client: MagicMock,
         mock_run: MagicMock,
         azure_provider: AzureProvider,
+        tmp_path: Path,
     ) -> None:
         """Test full setup flow (create VM, wait SSH, get IP, install, config, test)."""
         mock_env_get.return_value = "test-api-key"
 
-        # Mock ssh-keygen, resource group show, vm create, vm show
+        # Use existing SSH key to avoid depending on ~/.ssh/mcpbr_azure state
+        ssh_key = tmp_path / "test_key"
+        ssh_key.touch()
+        azure_provider.azure_config.ssh_key_path = ssh_key
+
+        # Mock resource group show, vm create, vm show (no ssh-keygen needed)
         mock_run.side_effect = [
-            Mock(returncode=0),  # ssh-keygen
             Mock(returncode=0, stdout='{"id": "rg-id"}'),  # az group show
             Mock(returncode=0, stdout='{"id": "vm-id"}'),  # az vm create
             Mock(returncode=0, stdout='"1.2.3.4"'),  # az vm show (note: quoted string in JSON)
@@ -618,11 +638,16 @@ class TestSetup:
         mock_time: MagicMock,
         mock_run: MagicMock,
         azure_provider: AzureProvider,
+        tmp_path: Path,
     ) -> None:
         """Test setup failure rolls back VM creation."""
-        # Mock ssh-keygen success, resource group show, VM creation success, IP retrieval failure
+        # Use existing SSH key to avoid depending on ~/.ssh/mcpbr_azure state
+        ssh_key = tmp_path / "test_key"
+        ssh_key.touch()
+        azure_provider.azure_config.ssh_key_path = ssh_key
+
+        # Mock resource group show, VM creation success, IP retrieval failure
         mock_run.side_effect = [
-            Mock(returncode=0),  # ssh-keygen
             Mock(returncode=0, stdout='{"id": "rg-id"}'),  # az group show
             Mock(returncode=0, stdout='{"id": "vm-id"}'),  # az vm create
             Mock(returncode=1, stderr="VM not found"),  # az vm show (failure)
@@ -687,11 +712,12 @@ class TestSetup:
         mock_ssh_client: MagicMock,
         mock_run: MagicMock,
         azure_provider: AzureProvider,
+        tmp_path: Path,
     ) -> None:
         """Test setup with generated SSH key."""
         mock_env_get.return_value = "test-api-key"
 
-        # No SSH key configured
+        # No SSH key configured - redirect home to tmp_path so key doesn't exist
         azure_provider.azure_config.ssh_key_path = None
 
         mock_run.side_effect = [
@@ -717,7 +743,8 @@ class TestSetup:
         mock_sftp = MagicMock()
         mock_client.open_sftp.return_value = mock_sftp
 
-        await azure_provider.setup()
+        with patch("mcpbr.infrastructure.azure.Path.home", return_value=tmp_path):
+            await azure_provider.setup()
 
         # Verify ssh-keygen was called
         ssh_keygen_call = mock_run.call_args_list[0]
@@ -793,12 +820,13 @@ class TestEnvironmentSetup:
 
         await azure_provider._install_dependencies()
 
-        # Verify command was executed
-        mock_client.exec_command.assert_called_once()
-        cmd = mock_client.exec_command.call_args[0][0]
-        assert "apt-get update" in cmd
-        assert "docker" in cmd.lower()
-        assert "pip3 install mcpbr" in cmd
+        # Verify all 4 steps were executed (Docker, Python, Node.js, mcpbr)
+        assert mock_client.exec_command.call_count == 4
+        all_cmds = [call[0][0] for call in mock_client.exec_command.call_args_list]
+        all_cmds_str = " ".join(all_cmds)
+        assert "apt-get update" in all_cmds_str
+        assert "docker" in all_cmds_str.lower()
+        assert "pip install mcpbr" in all_cmds_str
 
     async def test_install_dependencies_handles_failures_gracefully(
         self,
@@ -819,7 +847,8 @@ class TestEnvironmentSetup:
         # Should not raise - just log warning
         await azure_provider._install_dependencies()
 
-        mock_client.exec_command.assert_called_once()
+        # All 4 steps still execute even if individual steps fail
+        assert mock_client.exec_command.call_count == 4
 
     async def test_install_dependencies_installs_docker(
         self,
@@ -839,8 +868,9 @@ class TestEnvironmentSetup:
 
         await azure_provider._install_dependencies()
 
-        cmd = mock_client.exec_command.call_args[0][0]
-        assert "get.docker.com" in cmd
+        # Docker install is the first step
+        all_cmds = [call[0][0] for call in mock_client.exec_command.call_args_list]
+        assert any("get.docker.com" in cmd for cmd in all_cmds)
 
     async def test_install_dependencies_installs_python_version(
         self,
@@ -879,8 +909,9 @@ class TestEnvironmentSetup:
 
         await azure_provider._install_dependencies()
 
-        cmd = mock_client.exec_command.call_args[0][0]
-        assert "pip3 install mcpbr" in cmd
+        # mcpbr install is the last step
+        all_cmds = [call[0][0] for call in mock_client.exec_command.call_args_list]
+        assert any("pip install mcpbr" in cmd for cmd in all_cmds)
 
 
 # ============================================================================
@@ -1209,13 +1240,16 @@ class TestUpdatedSetup:
         mock_ssh_client: MagicMock,
         mock_run: MagicMock,
         azure_provider: AzureProvider,
+        tmp_path: Path,
     ) -> None:
         """Test full setup flow includes dependency installation."""
         mock_env_get.return_value = "test-api-key"
+        ssh_key = tmp_path / "test_key"
+        ssh_key.touch()
+        azure_provider.azure_config.ssh_key_path = ssh_key
 
-        # Mock subprocess calls
+        # Mock subprocess calls (no ssh-keygen needed with existing key)
         mock_run.side_effect = [
-            Mock(returncode=0),  # ssh-keygen
             Mock(returncode=0, stdout='{"id": "rg-id"}'),  # az group show
             Mock(returncode=0, stdout='{"id": "vm-id"}'),  # az vm create
             Mock(returncode=0, stdout='"1.2.3.4"'),  # az vm show
@@ -1259,12 +1293,15 @@ class TestUpdatedSetup:
         mock_ssh_client: MagicMock,
         mock_run: MagicMock,
         azure_provider: AzureProvider,
+        tmp_path: Path,
     ) -> None:
         """Test full setup flow includes config transfer."""
         mock_env_get.return_value = "test-api-key"
+        ssh_key = tmp_path / "test_key"
+        ssh_key.touch()
+        azure_provider.azure_config.ssh_key_path = ssh_key
 
         mock_run.side_effect = [
-            Mock(returncode=0),  # ssh-keygen
             Mock(returncode=0, stdout='{"id": "rg-id"}'),  # az group show
             Mock(returncode=0, stdout='{"id": "vm-id"}'),  # az vm create
             Mock(returncode=0, stdout='"1.2.3.4"'),  # az vm show
@@ -1301,12 +1338,15 @@ class TestUpdatedSetup:
         mock_ssh_client: MagicMock,
         mock_run: MagicMock,
         azure_provider: AzureProvider,
+        tmp_path: Path,
     ) -> None:
         """Test full setup flow includes env var export."""
         mock_env_get.return_value = "test-api-key"
+        ssh_key = tmp_path / "test_key"
+        ssh_key.touch()
+        azure_provider.azure_config.ssh_key_path = ssh_key
 
         mock_run.side_effect = [
-            Mock(returncode=0),  # ssh-keygen
             Mock(returncode=0, stdout='{"id": "rg-id"}'),  # az group show
             Mock(returncode=0, stdout='{"id": "vm-id"}'),  # az vm create
             Mock(returncode=0, stdout='"1.2.3.4"'),  # az vm show
@@ -1343,12 +1383,15 @@ class TestUpdatedSetup:
         mock_ssh_client: MagicMock,
         mock_run: MagicMock,
         azure_provider: AzureProvider,
+        tmp_path: Path,
     ) -> None:
         """Test full setup flow includes test task."""
         mock_env_get.return_value = "test-api-key"
+        ssh_key = tmp_path / "test_key"
+        ssh_key.touch()
+        azure_provider.azure_config.ssh_key_path = ssh_key
 
         mock_run.side_effect = [
-            Mock(returncode=0),  # ssh-keygen
             Mock(returncode=0, stdout='{"id": "rg-id"}'),  # az group show
             Mock(returncode=0, stdout='{"id": "vm-id"}'),  # az vm create
             Mock(returncode=0, stdout='"1.2.3.4"'),  # az vm show
@@ -1385,12 +1428,15 @@ class TestUpdatedSetup:
         mock_ssh_client: MagicMock,
         mock_run: MagicMock,
         azure_provider: AzureProvider,
+        tmp_path: Path,
     ) -> None:
         """Test setup fails if test task fails."""
         mock_env_get.return_value = "test-api-key"
+        ssh_key = tmp_path / "test_key"
+        ssh_key.touch()
+        azure_provider.azure_config.ssh_key_path = ssh_key
 
         mock_run.side_effect = [
-            Mock(returncode=0),  # ssh-keygen
             Mock(returncode=0, stdout='{"id": "rg-id"}'),  # az group show
             Mock(returncode=0, stdout='{"id": "vm-id"}'),  # az vm create
             Mock(returncode=0, stdout='"1.2.3.4"'),  # az vm show

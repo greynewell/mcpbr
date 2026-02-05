@@ -28,7 +28,7 @@ jobs:
             platform: macos
             arch: arm64
             artifact-name: mcpbr-macos-arm64
-          - os: macos-13
+          - os: macos-13-large
             platform: macos
             arch: x86_64
             artifact-name: mcpbr-macos-x86_64

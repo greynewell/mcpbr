@@ -82,7 +82,7 @@ LANGUAGE_CONFIGS: dict[Language, LanguageConfig] = {
         language=Language.JAVA,
         file_extension=".java",
         docker_image="eclipse-temurin:17-jdk-jammy",
-        run_command="java {file}",
+        run_command="java {file}",  # Requires Java 11+ single-file source execution
         test_framework="junit",
         compile_command="javac {file}",
     ),

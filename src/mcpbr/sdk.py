@@ -78,7 +78,7 @@ class MCPBenchmark:
         ValueError: If the config dict is invalid.
     """
 
-    def __init__(self, config: dict[str, Any] | str | Path) -> None:
+    def __init__(self, config: dict[str, Any] | str | Path | HarnessConfig) -> None:
         if isinstance(config, HarnessConfig):
             self.config: HarnessConfig = config
         elif isinstance(config, (str, Path)):

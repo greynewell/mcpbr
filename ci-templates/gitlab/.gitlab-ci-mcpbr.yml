@@ -25,6 +25,7 @@ variables:
       else
         pip install "mcpbr==$MCPBR_VERSION"
       fi
+    - export MCPBR_LOG_LEVEL="${MCPBR_LOG_LEVEL}"
 
 mcpbr_install:
   stage: setup

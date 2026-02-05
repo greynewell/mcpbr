@@ -54,7 +54,9 @@ jobs:
           for dir in all-results/results-*; do
             benchmark=$(basename "$dir")
             echo "### ${benchmark}" >> $GITHUB_STEP_SUMMARY
-            if [ -f "${dir}"/*.json ]; then
-              cat "${dir}"/*.json >> $GITHUB_STEP_SUMMARY
-            fi
+            for json_file in "${dir}"/*.json; do
+              if [ -f "$json_file" ]; then
+                cat "$json_file" >> $GITHUB_STEP_SUMMARY
+              fi
+            done
           done

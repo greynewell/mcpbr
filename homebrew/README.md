@@ -14,7 +14,7 @@ brew install mcpbr
 ### From the formula directly
 
 ```bash
-brew install --formula Formula/mcpbr.rb
+brew install --formula ./Formula/mcpbr.rb
 ```
 
 ## Updating the Formula

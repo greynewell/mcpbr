@@ -71,6 +71,7 @@ class ExecutionCheckpoint:
                     "error": f.error,
                     "type": f.failure_type.value,
                     "timestamp": f.timestamp,
+                    "retryable": f.retryable,
                 }
                 for f in self.failed_tasks
             ],
@@ -98,6 +99,7 @@ class ExecutionCheckpoint:
                     error=f["error"],
                     failure_type=FailureType(f["type"]),
                     timestamp=f["timestamp"],
+                    retryable=f.get("retryable", True),
                 )
                 for f in data["failed"]
             ],

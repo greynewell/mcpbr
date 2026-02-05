@@ -14,6 +14,8 @@ services:
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
       - MCPBR_LOG_LEVEL=${MCPBR_LOG_LEVEL:-INFO}
     command: ["run", "--config", "/home/mcpbr/configs/benchmark.yaml"]
 

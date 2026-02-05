@@ -218,6 +218,9 @@ class OpenAIProvider:
 
         response = self._client.chat.completions.create(**kwargs)
 
+        if not response.choices:
+            raise RuntimeError("OpenAI API returned empty response choices")
+
         choice = response.choices[0]
         tool_calls = []
         if choice.message.tool_calls:
@@ -276,25 +279,32 @@ class GeminiProvider:
     def get_tool_format(self) -> str:
         return "openai"
 
-    def _convert_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _convert_messages(
+        self, messages: list[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]], str | None]:
         """Convert OpenAI-style messages to Gemini content format.
+
+        Extracts system messages to use as system_instruction (Gemini's native
+        system prompt support), and converts the remaining messages.
 
         Args:
             messages: List of OpenAI-style message dicts.
 
         Returns:
-            List of Gemini-style content dicts.
+            Tuple of (contents, system_instruction). system_instruction is None
+            if no system message was found.
         """
         contents: list[dict[str, Any]] = []
+        system_instruction: str | None = None
         for msg in messages:
             role = msg.get("role", "user")
             if role == "system":
-                # Gemini treats system messages as user messages at the start
-                role = "user"
+                system_instruction = msg.get("content", "")
             elif role == "assistant":
-                role = "model"
-            contents.append({"role": role, "parts": [msg.get("content", "")]})
-        return contents
+                contents.append({"role": "model", "parts": [msg.get("content", "")]})
+            else:
+                contents.append({"role": role, "parts": [msg.get("content", "")]})
+        return contents, system_instruction
 
     def _convert_tools(self, tools: list[dict[str, Any]] | None) -> list[Any] | None:
         """Convert OpenAI-style tool definitions to Gemini function declarations.
@@ -326,7 +336,7 @@ class GeminiProvider:
         tools: list[dict[str, Any]] | None = None,
         max_tokens: int = 4096,
     ) -> ChatResponse:
-        contents = self._convert_messages(messages)
+        contents, system_instruction = self._convert_messages(messages)
         gemini_tools = self._convert_tools(tools)
 
         kwargs: dict[str, Any] = {
@@ -335,8 +345,13 @@ class GeminiProvider:
         }
         if gemini_tools:
             kwargs["tools"] = gemini_tools
+        if system_instruction:
+            kwargs["system_instruction"] = system_instruction
 
         response = self._client.generate_content(**kwargs)
+
+        if not response.candidates:
+            raise RuntimeError("Gemini API returned empty candidates")
 
         content_text = ""
         tool_calls = []
@@ -372,8 +387,12 @@ class GeminiProvider:
                 tool_calls=tool_calls,
             ),
             finish_reason=finish_reason,
-            input_tokens=response.usage_metadata.prompt_token_count,
-            output_tokens=response.usage_metadata.candidates_token_count,
+            input_tokens=getattr(response.usage_metadata, "prompt_token_count", 0)
+            if response.usage_metadata
+            else 0,
+            output_tokens=getattr(response.usage_metadata, "candidates_token_count", 0)
+            if response.usage_metadata
+            else 0,
         )
 
 
@@ -433,6 +452,9 @@ class QwenProvider:
             kwargs["tools"] = tools
 
         response = self._client.chat.completions.create(**kwargs)
+
+        if not response.choices:
+            raise RuntimeError("Qwen API returned empty response choices")
 
         choice = response.choices[0]
         tool_calls = []

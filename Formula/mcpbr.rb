@@ -3,8 +3,10 @@ class Mcpbr < Formula
 
   desc "Model Context Protocol Benchmark Runner - evaluate MCP servers against software engineering benchmarks"
   homepage "https://github.com/greynewell/mcpbr"
+  # NOTE: Update URL and sha256 when publishing a release.
+  # Run: curl -sL <url> | shasum -a 256
   url "https://files.pythonhosted.org/packages/source/m/mcpbr/mcpbr-0.6.0.tar.gz"
-  sha256 "PLACEHOLDER_SHA256"
+  sha256 "PLACEHOLDER_SHA256_REPLACE_ON_RELEASE"
   license "MIT"
 
   depends_on "python@3.11"

@@ -144,23 +144,23 @@ MODEL_PRICING: dict[str, ModelPricing] = {
     "qwen-plus": ModelPricing(
         model_id="qwen-plus",
         provider="Alibaba",
-        input_price_per_mtok=0.80,
-        output_price_per_mtok=2.00,
-        notes="Balanced Qwen model for general tasks",
+        input_price_per_mtok=0.40,
+        output_price_per_mtok=1.20,
+        notes="Base tier (0-256K tokens); scales to $1.20/$3.60 for 256K-1M",
     ),
     "qwen-turbo": ModelPricing(
         model_id="qwen-turbo",
         provider="Alibaba",
         input_price_per_mtok=0.30,
         output_price_per_mtok=0.60,
-        notes="Fast and cost-effective Qwen model",
+        notes="Fast Qwen model; pricing may vary by context tier",
     ),
     "qwen-max": ModelPricing(
         model_id="qwen-max",
         provider="Alibaba",
-        input_price_per_mtok=2.40,
-        output_price_per_mtok=9.60,
-        notes="Most capable Qwen model",
+        input_price_per_mtok=1.20,
+        output_price_per_mtok=6.00,
+        notes="Base tier (0-32K tokens); scales to $2.40/$12.00 for 32K-128K",
     ),
 }
 

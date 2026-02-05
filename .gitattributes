@@ -1,0 +1,2 @@
+# Ensure Windows batch files use CRLF line endings
+conda/bld.bat text eol=crlf

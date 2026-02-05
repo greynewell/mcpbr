@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.16] - 2026-02-05
+
 ### Added
 
 - **Custom benchmark support via YAML** (#29, #47): Users can define custom benchmarks without writing Python code using YAML definition files with configurable evaluation types (exact_match, numeric, regex, script)
@@ -727,6 +729,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.3.14]: https://github.com/greynewell/mcpbr/releases/tag/v0.3.14
 [0.3.13]: https://github.com/greynewell/mcpbr/releases/tag/v0.3.13
 [0.3.12]: https://github.com/greynewell/mcpbr/releases/tag/v0.3.12
+[0.4.16]: https://github.com/greynewell/mcpbr/releases/tag/v0.4.16
 [0.3.11]: https://github.com/greynewell/mcpbr/releases/tag/v0.3.11
 [0.3.10]: https://github.com/greynewell/mcpbr/releases/tag/v0.3.10
 [0.3.9]: https://github.com/greynewell/mcpbr/releases/tag/v0.3.9

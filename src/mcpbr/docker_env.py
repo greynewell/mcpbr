@@ -13,10 +13,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import docker
 from docker.models.containers import Container
 from docker.models.networks import Network
 from docker.models.volumes import Volume
+
+import docker
 
 MCPBR_LABEL = "mcpbr"
 MCPBR_INSTANCE_LABEL = "mcpbr.instance"

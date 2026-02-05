@@ -11,11 +11,12 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-import docker
 import docker.errors
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
+
+import docker
 
 from .docker_env import SWEBENCH_IMAGE_REGISTRY, get_swebench_image_name
 

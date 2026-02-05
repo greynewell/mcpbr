@@ -7,8 +7,9 @@ and Docker container configuration for GPU access.
 import logging
 import subprocess
 
-import docker
 import docker.types
+
+import docker
 
 logger = logging.getLogger(__name__)
 

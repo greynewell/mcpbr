@@ -13,10 +13,11 @@ import os
 import shutil
 from dataclasses import dataclass, field
 
-import docker
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+
+import docker
 
 from .benchmarks import create_benchmark
 from .config import HarnessConfig

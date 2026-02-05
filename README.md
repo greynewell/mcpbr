@@ -56,7 +56,7 @@ mcpbr runs controlled experiments: same model, same tasks, same environment - th
 
 ## Supported Benchmarks
 
-mcpbr supports 25+ benchmarks across 8 categories through a flexible abstraction layer:
+mcpbr supports 30+ benchmarks across 10 categories through a flexible abstraction layer:
 
 | Category | Benchmarks |
 |----------|-----------|
@@ -67,7 +67,11 @@ mcpbr supports 25+ benchmarks across 8 categories through a flexible abstraction
 | **Tool Use & Agents** | [MCPToolBench++](https://greynewell.github.io/mcpbr/benchmarks/mcptoolbench/), [ToolBench](https://greynewell.github.io/mcpbr/benchmarks/toolbench/), [AgentBench](https://greynewell.github.io/mcpbr/benchmarks/agentbench/), [WebArena](https://greynewell.github.io/mcpbr/benchmarks/webarena/), [TerminalBench](https://greynewell.github.io/mcpbr/benchmarks/terminalbench/), [InterCode](https://greynewell.github.io/mcpbr/benchmarks/intercode/) |
 | **ML Research** | [MLAgentBench](https://greynewell.github.io/mcpbr/benchmarks/mlagentbench/) |
 | **Code Understanding** | [RepoQA](https://greynewell.github.io/mcpbr/benchmarks/repoqa/) |
+| **Multimodal** | MMMU |
+| **Long Context** | LongBench |
+| **Safety & Adversarial** | Adversarial (HarmBench) |
 | **Security** | [CyberGym](https://greynewell.github.io/mcpbr/benchmarks/cybergym/) |
+| **Custom** | User-defined benchmarks via YAML |
 
 ### Featured Benchmarks
 
@@ -1426,10 +1430,10 @@ We're building the defacto standard for MCP server benchmarking! Our [v1.0 Roadm
 - Cost analysis in reports
 
 **Phase 2: Benchmarks** (v0.4.0)
-- HumanEval, MBPP, ToolBench
-- GAIA for general AI capabilities
-- Custom benchmark YAML support
-- SWE-bench Verified
+- ✅ 30+ benchmarks across 10 categories
+- ✅ Custom benchmark YAML support
+- ✅ Custom metrics, failure analysis, sampling strategies
+- ✅ Dataset versioning, latency metrics, GPU support, few-shot learning
 
 **Phase 3: Developer Experience** (v0.5.0)
 - Real-time dashboard

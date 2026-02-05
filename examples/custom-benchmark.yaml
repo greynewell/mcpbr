@@ -1,0 +1,81 @@
+# Example Custom Benchmark Definition
+#
+# This file demonstrates how to define a custom benchmark via YAML.
+# Users can create their own benchmarks without writing Python code.
+#
+# Usage:
+#   mcpbr run --benchmark custom --custom-benchmark-path ./my-benchmark.yaml
+#
+# Required fields:
+#   - name: A unique identifier for your benchmark
+#   - dataset: HuggingFace dataset ID (e.g., "my-org/my-dataset") or local path
+#   - evaluation_type: How to evaluate answers (exact_match, numeric, regex, script)
+#
+# Optional fields:
+#   - subset: Dataset subset/config name (e.g., "main", "test")
+#   - split: Dataset split to use (default: "test")
+#   - task_id_field: Field name for unique task IDs (default: "id")
+#   - problem_statement_field: Field name for the problem text (default: "question")
+#   - answer_field: Field name for the ground truth answer (default: "answer")
+#   - prompt_template: Custom prompt template with {problem_statement} placeholder
+#   - docker_image: Pre-built Docker image to use for environments
+#   - setup_commands: List of shell commands to run when setting up the environment
+#   - evaluation_script: Shell command for script-based evaluation (required if evaluation_type: script)
+#   - regex_pattern: Regex pattern with capture group (required if evaluation_type: regex)
+#   - numeric_rtol: Relative tolerance for numeric comparison (default: 0.001)
+#   - numeric_atol: Absolute tolerance for numeric comparison (default: 0.001)
+
+# --- Example: A simple Q&A benchmark with exact match ---
+
+name: my-qa-benchmark
+dataset: my-org/my-qa-dataset
+subset: main
+split: test
+
+# Field mapping - map your dataset columns to benchmark fields
+task_id_field: id
+problem_statement_field: question
+answer_field: expected_answer
+
+# Evaluation strategy
+evaluation_type: exact_match
+
+# Custom prompt template (optional)
+# Use {problem_statement} as the placeholder for the task's problem text.
+# You can also reference other task fields by name.
+prompt_template: |
+  Answer the following question accurately and concisely:
+
+  {problem_statement}
+
+  IMPORTANT:
+  - Provide only the answer, no explanation needed
+  - Be precise and specific
+
+# Docker environment (optional)
+# docker_image: python:3.11-slim
+# setup_commands:
+#   - "pip install numpy pandas"
+#   - "apt-get update && apt-get install -y jq"
+
+# --- Alternative: Numeric evaluation ---
+# Uncomment below to use numeric evaluation instead of exact_match:
+#
+# evaluation_type: numeric
+# numeric_rtol: 0.01    # 1% relative tolerance
+# numeric_atol: 0.1     # absolute tolerance
+
+# --- Alternative: Regex evaluation ---
+# Uncomment below to use regex evaluation:
+#
+# evaluation_type: regex
+# regex_pattern: "(?:the answer is|answer:)\\s*(\\S+)"
+#   The first capture group is extracted and compared to ground truth.
+
+# --- Alternative: Script evaluation ---
+# Uncomment below to use a custom evaluation script:
+#
+# evaluation_type: script
+# evaluation_script: "python3 /tmp/eval.py /tmp/solution.txt /tmp/ground_truth.txt"
+#   The script should exit with code 0 if correct, non-zero otherwise.
+#   solution.txt and ground_truth.txt are automatically populated.

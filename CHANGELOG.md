@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Custom benchmark support via YAML** (#29, #47): Users can define custom benchmarks without writing Python code using YAML definition files with configurable evaluation types (exact_match, numeric, regex, script)
+- **Custom metrics framework** (#64): Define and compute custom evaluation metrics beyond standard accuracy/pass rates, with composite metrics support and a built-in metric registry
+- **Failure analysis module** (#67): Categorize and analyze evaluation failures with pattern extraction, failure reports, and actionable recommendations
+- **Random and stratified sampling** (#142): Add sampling strategies (sequential, random, stratified) with seed control for reproducible benchmark task selection
+- **Dataset versioning** (#138): Pin and track HuggingFace dataset versions for reproducible benchmark runs with manifest save/load support
+- **Latency and performance metrics** (#129): Track task latency, time-to-first-tool-call, throughput, and percentile statistics (p50/p95/p99)
+- **GPU support for Docker containers** (#121): Detect NVIDIA GPUs and configure Docker containers with GPU access for ML benchmarks
+- **Few-shot learning support** (#127): Variable shot counts with selection strategies (random, similar, diverse) and learning curve analysis
+- **MMMU multi-modal benchmark** (#123): Massive Multi-discipline Multimodal Understanding benchmark for image understanding tasks
+- **LongBench long-context benchmark** (#125): Long-context benchmark with F1, ROUGE-L, classification accuracy, and edit similarity metrics across 21 subsets
+- **Adversarial testing benchmark** (#126): Safety and robustness benchmark using HarmBench with refusal detection across jailbreak, hallucination, bias, and robustness categories
+- **MCPToolBench++ integration tests** (#232): Comprehensive test suite for the MCPToolBench++ benchmark implementation
 - **21 new benchmark implementations** (#6, #7, #18, #19, #20, #22, #24, #25, #26, #27, #28, #33, #34, #35, #37, #38, #40, #45, #46, #49): Initial stub implementations for all planned benchmarks
 
 ### Fixed

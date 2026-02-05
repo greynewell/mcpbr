@@ -42,6 +42,10 @@ VALID_BENCHMARKS = (
     "webarena",
     "mlagentbench",
     "intercode",
+    "custom",
+    "mmmu",
+    "longbench",
+    "adversarial",
 )
 VALID_INFRASTRUCTURE_MODES = ("local", "azure")
 

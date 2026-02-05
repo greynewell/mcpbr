@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from .adversarial import AdversarialBenchmark
 from .agentbench import AgentBenchBenchmark
 from .aider_polyglot import AiderPolyglotBenchmark
 from .apps import APPSBenchmark
@@ -11,6 +12,7 @@ from .bigbench_hard import BigBenchHardBenchmark
 from .bigcodebench import BigCodeBenchBenchmark
 from .codecontests import CodeContestsBenchmark
 from .codereval import CoderEvalBenchmark
+from .custom import CustomBenchmark
 from .cybergym import CyberGymBenchmark
 from .gaia import GAIABenchmark
 from .gsm8k import GSM8KBenchmark
@@ -18,10 +20,12 @@ from .hellaswag import HellaSwagBenchmark
 from .humaneval import HumanEvalBenchmark
 from .intercode import InterCodeBenchmark
 from .leetcode import LeetCodeBenchmark
+from .longbench import LongBenchBenchmark
 from .math_benchmark import MATHBenchmark
 from .mbpp import MBPPBenchmark
 from .mcptoolbench import MCPToolBenchmark
 from .mlagentbench import MLAgentBenchBenchmark
+from .mmmu import MMMUBenchmark
 from .repoqa import RepoQABenchmark
 from .swebench import SWEBenchmark
 from .terminalbench import TerminalBenchBenchmark
@@ -57,6 +61,10 @@ __all__ = [
     "WebArenaBenchmark",
     "MLAgentBenchBenchmark",
     "InterCodeBenchmark",
+    "CustomBenchmark",
+    "MMMUBenchmark",
+    "LongBenchBenchmark",
+    "AdversarialBenchmark",
     "BENCHMARK_REGISTRY",
     "create_benchmark",
     "list_benchmarks",
@@ -91,6 +99,10 @@ BENCHMARK_REGISTRY: dict[str, type[Benchmark]] = {
     "webarena": WebArenaBenchmark,
     "mlagentbench": MLAgentBenchBenchmark,
     "intercode": InterCodeBenchmark,
+    "custom": CustomBenchmark,
+    "mmmu": MMMUBenchmark,
+    "longbench": LongBenchBenchmark,
+    "adversarial": AdversarialBenchmark,
 }
 
 

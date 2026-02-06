@@ -7,6 +7,125 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **setup_command runs as mcpbr user in Docker** (#386): setup_command now executes as the
+  mcpbr user instead of root, preventing EACCES permission errors when the agent accesses
+  files created during setup (e.g., npm cache)
+- **Workspace verification after copy** (#387): Added filesystem sync and file-count check
+  after copying the repo to /workspace, raising an early error if the workspace is empty
+- **setup_command failures are always visible** (#388): Non-zero exit codes from
+  setup_command now always print a warning, not just in `--verbose` mode
+
+### Added
+
+- **Rate limiting for API calls** (#196): Intelligent rate limiting to prevent API quota exhaustion
+  - Token bucket algorithm with configurable requests-per-minute (`rate_limit_rpm`)
+  - Three backoff strategies: fixed, exponential, and adaptive (with jitter)
+  - Retry-After header parsing for automatic 429 recovery
+  - Real-time metrics tracking (throttled requests, total wait time, error counts)
+  - Configurable safety margin to stay within provider limits
+- **Benchmark reproducibility** (#136): Ensure evaluations are reproducible across runs
+  - Global random seed control (`global_seed`) for deterministic evaluation ordering
+  - Environment snapshot capture (Python version, platform, installed packages)
+  - Deterministic mode with `PYTHONHASHSEED` control
+  - SHA256 checksums for reproducibility report verification
+  - JSON-serializable reproducibility reports for sharing and auditing
+- **Privacy controls** (#120): PII detection, redaction, and data governance
+  - Three redaction levels: none, basic (emails/keys/IPs), strict (all PII patterns)
+  - 7 built-in PII patterns (email, API key, IPv4/IPv6, credit card, SSN, phone)
+  - Custom regex pattern support for organization-specific redaction
+  - Recursive dict redaction for nested result structures
+  - Task ID anonymization via SHA256 hashing
+  - Data retention policies with configurable expiry
+  - Field exclusion to strip sensitive result fields before saving
+- **Audit logging** (#118): Tamper-proof audit trail for compliance and security
+  - 13 auditable event types covering config, benchmark, task, result, and data lifecycle
+  - HMAC-SHA256 hash chain for tamper detection and integrity verification
+  - JSON and CSV export formats for compliance reporting
+  - Configurable event filtering (log all or specific event types)
+  - Append-only JSONL file logging with automatic directory creation
+  - Standalone `verify_integrity()` to detect log tampering
+- **Interactive tutorial system** (#198, #157): CLI-based tutorials for learning mcpbr
+  - `mcpbr tutorial list` — browse available tutorials with difficulty levels
+  - `mcpbr tutorial start <id>` — step-by-step walkthrough with validation
+  - `mcpbr tutorial progress` — track completion across all tutorials
+  - `mcpbr tutorial reset <id>` — restart a tutorial from scratch
+  - 4 built-in tutorials: Getting Started, Configuration, Benchmarks, Analytics
+  - Progress persistence in `~/.mcpbr_state/tutorials/`
+- **Comprehensive API reference documentation** (#202, #156): Auto-generated docs from source
+  - SDK, Configuration, Benchmarks, Analytics, and Reports API pages
+  - mkdocstrings integration for live source rendering
+- **Enhanced benchmark guides** (#203): 6 benchmark docs expanded to comprehensive guides
+  - HumanEval, GSM8K, GAIA, CyberGym, TerminalBench, MCPToolBench++ — each with evaluation methodology, configuration examples, best practices, and troubleshooting
+- **Plugin development guide** (#160): Complete guide for extending mcpbr
+  - Custom benchmark creation with Benchmark protocol walkthrough
+  - Custom provider and custom metrics implementation
+  - Testing guidelines and publishing instructions
+- **Best practices guide enhancements** (#159): 6 new sections added
+  - Security, Performance Optimization, CI/CD Integration, Troubleshooting, Cost Management, Analytics Best Practices
+  - 6 new FAQ entries covering common workflows
+- **Custom domain** (#379): Documentation site now served at https://mcpbr.org/
+  - GitHub Pages CNAME configuration
+  - All documentation URLs updated to mcpbr.org
+
+## [0.7.0] - 2026-02-06
+
+### Added
+
+- **Analytics package** (#178, #179, #183, #61, #63, #57, #60, #180, #181, #182, #184, #185, #187, #226, #227): Comprehensive analytics and insights engine
+  - **Historical results database** (#178): SQLite-backed `ResultsDatabase` for storing, querying, and tracking evaluation runs over time
+  - **Performance regression detection** (#179): `RegressionDetector` with statistical significance testing for score, cost, latency, and token regressions
+  - **Multi-model comparison** (#183): `ComparisonEngine` with Pareto frontier analysis, winner analysis, and pairwise statistical significance testing
+  - **Statistical significance testing** (#61, #63): Chi-squared test, bootstrap confidence intervals, Cohen's d effect size, Mann-Whitney U, and permutation tests — all implemented with stdlib only (no numpy/scipy)
+  - **Trend analysis** (#57, #60): Time-series trend detection with linear regression, moving averages, and direction classification
+  - **A/B testing framework** (#180): `ABTest` class for controlled experiment analysis with resolution rate comparison
+  - **Leaderboard generation** (#181): Ranked leaderboards with ASCII table and Markdown output, sortable by any metric
+  - **Custom metrics registry** (#182): `MetricsRegistry` with 5 built-in metrics and extensible custom metric registration
+  - **Benchmark difficulty estimation** (#184): Task difficulty scoring based on resolution rates, cost, and iterations
+  - **Correlation analysis** (#185): Pearson and Spearman correlation with automatic metric pair analysis
+  - **Anomaly detection** (#187): Z-score, IQR, and MAD methods for detecting outlier tasks across cost, tokens, runtime, and iterations
+  - **Error pattern analysis** (#227): `ErrorPatternAnalyzer` with Jaccard similarity clustering, temporal pattern detection, and actionable recommendations
+  - **Cross-benchmark comparison** (#226): Side-by-side comparison with task-level overlap analysis and unique-win identification
+- **Interactive HTML reports** (#39, #55): `HTMLReportGenerator` with Chart.js charts, dark mode toggle, sortable task tables, and responsive layout
+- **Enhanced Markdown reports** (#42): `EnhancedMarkdownGenerator` with shields.io badges, mermaid pie/bar charts, collapsible sections, and analysis tables
+- **PDF reports** (#56): `PDFReportGenerator` with CSS @media print styles, page numbers, custom branding, and optional weasyprint PDF export
+- **Comparison reports** (#53, #59): `mcpbr compare` CLI command for multi-run comparison with statistical significance, winner analysis, and Pareto frontier
+- **CLI report output flags**: `--output-html`, `--output-markdown`, `--output-pdf` options on the `mcpbr run` command for generating reports alongside evaluation
+- **CLI analytics subcommands**: `mcpbr analytics store`, `mcpbr analytics trends`, `mcpbr analytics leaderboard`, `mcpbr analytics regression` for database-backed analytics workflows
+- **310 new tests** for analytics modules, report generators, and CLI commands
+
+## [0.6.0] - 2026-02-05
+
+### Added
+
+- **Graceful degradation** (#70): Fault-tolerant task execution with failure isolation, classification (transient/permanent/unknown), configurable `continue_on_error` and `max_failures` policies, execution checkpointing for crash recovery, and partial report generation
+  - New config fields: `continue_on_error`, `max_failures`, `checkpoint_interval`, `resume_from_checkpoint`
+- **Multi-provider support** (#229): Added OpenAI, Google Gemini, and Alibaba Qwen as model providers alongside Anthropic
+  - `OpenAIProvider` for GPT-4o, GPT-4 Turbo, and GPT-4o Mini models
+  - `GeminiProvider` for Gemini 2.0 Flash, Gemini 1.5 Pro, and Gemini 1.5 Flash models
+  - `QwenProvider` for Qwen Plus, Qwen Turbo, and Qwen Max models via DashScope API
+  - New optional dependencies: `openai`, `gemini`, `all-providers` extras
+  - Pricing data for all 9 new models
+  - Model registry entries with context window and tool support metadata
+- **Multi-language support** (#230): Cross-language benchmark execution for Python, JavaScript, TypeScript, Java, and Go
+  - Per-language Docker images, run/compile commands, and test framework configs
+  - Automatic language detection from filenames and code patterns
+  - Cross-language metrics aggregation
+- **Structured logging** (#231): JSON and human-readable log formatters with contextual metadata
+  - File rotation, configurable log levels via `MCPBR_LOG_LEVEL` env var
+  - `LogContext` context manager for injecting task/benchmark fields into log records
+- **Public Python SDK** (#232): Programmatic API for configuring and running benchmarks
+  - `MCPBenchmark` class with config from dict, YAML, or `HarnessConfig`
+  - `list_benchmarks()`, `list_providers()`, `list_models()`, `get_version()` helpers
+  - Exported in top-level `mcpbr` package for `from mcpbr import MCPBenchmark`
+- **Platform distribution files**: Docker, Conda, Homebrew, GitHub Actions, and CI templates
+  - `Dockerfile.app` multi-stage build for container deployment
+  - `docker/docker-compose.yml` for multi-container orchestration
+  - `conda/meta.yaml` recipe for Conda packaging
+  - `action/action.yml` GitHub Action with basic and matrix examples
+  - `ci-templates/` for GitLab CI and CircleCI integration
+
 ## [0.5.0] - 2026-02-05
 
 ### Added

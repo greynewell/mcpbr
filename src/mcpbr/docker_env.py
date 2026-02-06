@@ -139,6 +139,7 @@ class TaskEnvironment:
         timeout: int = 60,
         workdir: str | None = None,
         environment: dict[str, str] | None = None,
+        user: str | None = None,
     ) -> tuple[int, str, str]:
         """Execute a command in the container.
 
@@ -147,6 +148,7 @@ class TaskEnvironment:
             timeout: Timeout in seconds.
             workdir: Working directory (defaults to /workspace).
             environment: Optional environment variables to set.
+            user: Optional user to run the command as (e.g., "mcpbr").
 
         Returns:
             Tuple of (exit_code, stdout, stderr).
@@ -164,6 +166,7 @@ class TaskEnvironment:
                 workdir=wd,
                 demux=True,
                 environment=environment,
+                user=user or "",
             )
             stdout = result.output[0].decode("utf-8") if result.output[0] else ""
             stderr = result.output[1].decode("utf-8") if result.output[1] else ""
@@ -583,6 +586,22 @@ CMD ["/bin/bash"]
             "cd /workspace && git checkout -- . && git clean -fd",
             timeout=30,
         )
+
+        # Flush filesystem buffers to ensure all copied files are visible
+        # before any subsequent commands (e.g., setup_command) run.
+        await env.exec_command("sync", timeout=10)
+
+        # Verify workspace is populated — catch copy failures early
+        exit_code, stdout, _ = await env.exec_command(
+            "find /workspace -maxdepth 1 -mindepth 1 | head -5 | wc -l",
+            timeout=10,
+        )
+        file_count = int(stdout.strip()) if exit_code == 0 and stdout.strip().isdigit() else 0
+        if file_count == 0:
+            raise RuntimeError(
+                "Workspace /workspace appears empty after copy from /testbed. "
+                "The filesystem may not have synced correctly."
+            )
 
         env.workdir = "/workspace"
 

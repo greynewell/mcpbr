@@ -581,18 +581,22 @@ class ClaudeCodeHarness:
         # Source the env file so setup_command has access to API keys etc.
         env_file = "/tmp/.mcpbr_env.sh"
         setup_full_cmd = f"source {shlex.quote(env_file)} && {setup_cmd}"
+
+        # Run as the mcpbr user so files created by setup_command are
+        # accessible to the agent, which also runs as mcpbr.
+        setup_user = "mcpbr" if env.claude_cli_installed else None
+
         setup_exit, _setup_stdout, setup_stderr = await env.exec_command(
             ["/bin/bash", "-c", setup_full_cmd],
             timeout=setup_timeout,
+            user=setup_user,
         )
 
         if setup_exit != 0:
-            if verbose:
-                self._console.print(
-                    f"[yellow]⚠ Setup command exited with code {setup_exit}[/yellow]"
-                )
-                if setup_stderr:
-                    self._console.print(f"[dim]{setup_stderr[:500]}[/dim]")
+            # Always warn on failure so users can diagnose issues (#388)
+            self._console.print(f"[yellow]⚠ Setup command exited with code {setup_exit}[/yellow]")
+            if verbose and setup_stderr:
+                self._console.print(f"[dim]{setup_stderr[:500]}[/dim]")
             # Non-fatal: continue with agent even if setup fails
         elif verbose:
             self._console.print("[green]✓ Setup command completed[/green]")

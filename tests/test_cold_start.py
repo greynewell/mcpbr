@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from mcpbr.harness import TaskResult
+from mcpbr.harness import TaskResult, _should_retry_zero_iteration, _stagger_delay
 
 
 class TestStaggeredStarts:
@@ -19,10 +19,9 @@ class TestStaggeredStarts:
         image pulls and container startups.
         """
         launch_times: list[float] = []
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
-        # Fake run_single_task that just records when it was called
-        async def fake_run_single_task(*args, **kwargs):
+        async def fake_run_single_task(task):
             launch_times.append(loop.time())
             await asyncio.sleep(0.05)  # Simulate brief work
             return TaskResult(instance_id=f"task-{len(launch_times)}")
@@ -33,16 +32,14 @@ class TestStaggeredStarts:
         semaphore = asyncio.Semaphore(max_concurrent)
         task_counter = 0
 
-        from mcpbr.harness import _stagger_delay
-
         async def run_with_semaphore(task):
             nonlocal task_counter
-            my_index = task_counter
-            task_counter += 1
-            delay = _stagger_delay(my_index, max_concurrent)
-            if delay > 0:
-                await asyncio.sleep(delay)
             async with semaphore:
+                my_index = task_counter
+                task_counter += 1
+                delay = _stagger_delay(my_index, max_concurrent)
+                if delay > 0:
+                    await asyncio.sleep(delay)
                 return await fake_run_single_task(task)
 
         async_tasks = [asyncio.create_task(run_with_semaphore(t)) for t in tasks]
@@ -59,8 +56,6 @@ class TestStaggeredStarts:
     @pytest.mark.asyncio
     async def test_stagger_delay_values(self) -> None:
         """_stagger_delay should return increasing delays for the first batch."""
-        from mcpbr.harness import _stagger_delay
-
         # First task: no delay
         assert _stagger_delay(0, max_concurrent=5) == 0.0
 
@@ -77,22 +72,16 @@ class TestStaggeredStarts:
     @pytest.mark.asyncio
     async def test_stagger_delay_single_concurrent(self) -> None:
         """With max_concurrent=1, no staggering is needed."""
-        from mcpbr.harness import _stagger_delay
-
         assert _stagger_delay(0, max_concurrent=1) == 0.0
         assert _stagger_delay(1, max_concurrent=1) == 0.0
 
 
 class TestZeroIterationRetry:
-    """Verify that tasks which timeout with zero iterations get retried."""
+    """Verify that _should_retry_zero_iteration detects cold-start failures."""
 
     @pytest.mark.asyncio
-    async def test_zero_iteration_timeout_triggers_retry(self) -> None:
-        """A task that times out with 0 iterations should be retried once."""
-        call_count = 0
-
-        # First call: returns zero-iteration timeout (cold-start failure)
-        # Second call: returns a real result
+    async def test_detects_cold_start_failure(self) -> None:
+        """Zero iterations + zero tokens + timeout = cold-start failure."""
         zero_iter_result = {
             "resolved": False,
             "patch_applied": False,
@@ -104,58 +93,11 @@ class TestZeroIterationRetry:
             "cost": 0.0,
             "runtime_seconds": 236.0,
         }
-        real_result = {
-            "resolved": True,
-            "patch_applied": True,
-            "status": "completed",
-            "tokens": {"input": 5000, "output": 2000},
-            "iterations": 15,
-            "tool_calls": 10,
-            "cost": 0.05,
-            "runtime_seconds": 180.0,
-        }
-
-        async def mock_run_eval(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return zero_iter_result
-            return real_result
-
-        from mcpbr.harness import _should_retry_zero_iteration
-
-        # Should retry: zero iterations + timeout status
         assert _should_retry_zero_iteration(zero_iter_result) is True
-
-        # Should NOT retry: has iterations
-        assert _should_retry_zero_iteration(real_result) is False
-
-        # Should NOT retry: zero iterations but not a timeout
-        error_result = {**zero_iter_result, "status": "error", "error": "Something broke"}
-        assert _should_retry_zero_iteration(error_result) is False
-
-    @pytest.mark.asyncio
-    async def test_zero_iteration_retry_only_happens_once(self) -> None:
-        """Even if retry also produces zero iterations, don't retry again."""
-        from mcpbr.harness import _should_retry_zero_iteration
-
-        zero_iter = {
-            "resolved": False,
-            "status": "timeout",
-            "iterations": 0,
-            "tokens": {"input": 0, "output": 0},
-        }
-
-        # First check: should retry
-        assert _should_retry_zero_iteration(zero_iter) is True
-        # The retry logic itself limits to one retry — this function just
-        # checks the condition; the caller is responsible for the retry cap.
 
     @pytest.mark.asyncio
     async def test_completed_task_not_retried(self) -> None:
         """A task that completed successfully should never be retried."""
-        from mcpbr.harness import _should_retry_zero_iteration
-
         good_result = {
             "resolved": True,
             "status": "completed",
@@ -167,8 +109,6 @@ class TestZeroIterationRetry:
     @pytest.mark.asyncio
     async def test_nonzero_iteration_timeout_not_retried(self) -> None:
         """A timeout with real iterations is a genuine timeout, not cold-start."""
-        from mcpbr.harness import _should_retry_zero_iteration
-
         real_timeout = {
             "resolved": False,
             "status": "timeout",
@@ -176,3 +116,15 @@ class TestZeroIterationRetry:
             "tokens": {"input": 3000, "output": 1500},
         }
         assert _should_retry_zero_iteration(real_timeout) is False
+
+    @pytest.mark.asyncio
+    async def test_non_timeout_error_not_retried(self) -> None:
+        """Zero iterations from a non-timeout error should not trigger retry."""
+        error_result = {
+            "resolved": False,
+            "status": "error",
+            "error": "Something broke",
+            "iterations": 0,
+            "tokens": {"input": 0, "output": 0},
+        }
+        assert _should_retry_zero_iteration(error_result) is False

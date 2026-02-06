@@ -355,6 +355,24 @@ async def run_single_task(
                     mcp_server_config=config.mcp_server_a,
                     server_name="server_a",
                 )
+                # Retry once on cold-start failure (#401)
+                if result.mcp_server_a and _should_retry_zero_iteration(result.mcp_server_a):
+                    logger.info(
+                        "Retrying MCP server_a task %s (zero-iteration cold-start)", instance_id
+                    )
+                    result.mcp_server_a = await _run_mcp_evaluation(
+                        task,
+                        config,
+                        docker_manager,
+                        benchmark,
+                        verbose,
+                        verbosity,
+                        mcp_log_writer_a if mcp_log_writer_a else log_file,
+                        cache,
+                        mcp_logs_dir,
+                        mcp_server_config=config.mcp_server_a,
+                        server_name="server_a",
+                    )
             finally:
                 if mcp_log_writer_a:
                     mcp_log_writer_a.close()
@@ -377,6 +395,24 @@ async def run_single_task(
                     mcp_server_config=config.mcp_server_b,
                     server_name="server_b",
                 )
+                # Retry once on cold-start failure (#401)
+                if result.mcp_server_b and _should_retry_zero_iteration(result.mcp_server_b):
+                    logger.info(
+                        "Retrying MCP server_b task %s (zero-iteration cold-start)", instance_id
+                    )
+                    result.mcp_server_b = await _run_mcp_evaluation(
+                        task,
+                        config,
+                        docker_manager,
+                        benchmark,
+                        verbose,
+                        verbosity,
+                        mcp_log_writer_b if mcp_log_writer_b else log_file,
+                        cache,
+                        mcp_logs_dir,
+                        mcp_server_config=config.mcp_server_b,
+                        server_name="server_b",
+                    )
             finally:
                 if mcp_log_writer_b:
                     mcp_log_writer_b.close()
@@ -1137,14 +1173,16 @@ async def run_evaluation(
             budget_exceeded = True
             return None
 
-        # Stagger first-batch launches to avoid cold-start contention (#401)
-        my_index = _task_launch_counter
-        _task_launch_counter += 1
-        delay = _stagger_delay(my_index, config.max_concurrent)
-        if delay > 0:
-            await asyncio.sleep(delay)
-
         async with semaphore:
+            # Stagger first-batch launches to avoid cold-start contention (#401).
+            # Delay is inside the semaphore so the sleeping task holds its slot
+            # and later tasks cannot leapfrog ahead of the first batch.
+            my_index = _task_launch_counter
+            _task_launch_counter += 1
+            delay = _stagger_delay(my_index, config.max_concurrent)
+            if delay > 0:
+                await asyncio.sleep(delay)
+
             result = await run_single_task(
                 task,
                 config,

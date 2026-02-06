@@ -583,13 +583,13 @@ CMD ["/bin/bash"]
         return env
 
     async def _check_workspace_file_count(self, env: TaskEnvironment) -> int:
-        """Check the number of top-level entries in /workspace.
+        """Check whether /workspace has any top-level entries.
 
         Args:
             env: Task environment to check.
 
         Returns:
-            Number of top-level files/directories in /workspace.
+            Number of top-level files/directories found (capped at 5).
         """
         exit_code, stdout, _ = await env.exec_command(
             "find /workspace -maxdepth 1 -mindepth 1 | head -5 | wc -l",
@@ -658,7 +658,7 @@ CMD ["/bin/bash"]
             "Workspace still empty after sync retry — re-copying from /testbed "
             f"(instance={env.instance_id})"
         )
-        exit_code, stdout, stderr = await env.exec_command(
+        exit_code, _, stderr = await env.exec_command(
             "cp -r /testbed/. /workspace/",
             timeout=120,
         )
@@ -682,8 +682,9 @@ CMD ["/bin/bash"]
 
         # --- Exhausted ---
         raise RuntimeError(
-            "Workspace /workspace appears empty after copy from /testbed. "
-            "The filesystem may not have synced correctly."
+            f"Workspace /workspace appears empty after copy from /testbed "
+            f"(instance={env.instance_id}). "
+            f"The filesystem may not have synced correctly."
         )
 
     async def _install_claude_cli(self, env: TaskEnvironment) -> None:

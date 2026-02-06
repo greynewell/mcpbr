@@ -308,7 +308,7 @@ class TestWorkspaceVerification:
 
     @pytest.mark.asyncio
     @patch("asyncio.sleep", return_value=None)
-    async def test_copy_repo_raises_on_empty_workspace(self, mock_sleep):
+    async def test_copy_repo_raises_on_empty_workspace(self, _mock_sleep):
         """If workspace is empty after all retries, a RuntimeError should be raised."""
         container = MagicMock()
 
@@ -429,6 +429,8 @@ class TestWorkspaceVerification:
         await manager._copy_repo_to_workspace(env)
 
         assert env.workdir == "/workspace"
+        # Verify sleep was called during sync retry phase
+        mock_sleep.assert_awaited_once_with(2)
 
     @pytest.mark.asyncio
     @patch("asyncio.sleep", return_value=None)

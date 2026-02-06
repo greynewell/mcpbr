@@ -69,14 +69,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - GitHub Pages CNAME configuration
   - All documentation URLs updated to mcpbr.org
 
-## [0.5.5] - 2026-02-06
-
-### Fixed
-
-- **Retry empty workspace after Docker copy** (#405): Under high concurrency, the Docker
-  filesystem copy from `/testbed` to `/workspace` can silently produce an empty workspace.
-  Now retries with a sync and, if necessary, a full re-copy before raising an error.
-
 ## [0.7.0] - 2026-02-06
 
 ### Added
@@ -133,6 +125,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `conda/meta.yaml` recipe for Conda packaging
   - `action/action.yml` GitHub Action with basic and matrix examples
   - `ci-templates/` for GitLab CI and CircleCI integration
+
+## [0.5.5] - 2026-02-06
+
+### Fixed
+
+- **Retry empty workspace after Docker copy** (#405): Under high concurrency, the Docker
+  filesystem copy from `/testbed` to `/workspace` can silently produce an empty workspace.
+  Now retries with a sync and, if necessary, a full re-copy before raising an error.
 
 ## [0.5.0] - 2026-02-05
 

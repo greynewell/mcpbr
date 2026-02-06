@@ -555,6 +555,48 @@ class ClaudeCodeHarness:
         self.thinking_budget = thinking_budget
         self._console = Console()
 
+    async def run_setup_command(
+        self,
+        env: TaskEnvironment,
+        verbose: bool = False,
+    ) -> None:
+        """Run MCP server setup_command inside the container.
+
+        This MUST be called from the evaluation harness BEFORE the agent timer
+        starts (i.e. before asyncio.wait_for wraps agent.solve()). Expensive
+        operations like pre-computing code graphs happen here and should never
+        count against the task timeout.
+        """
+        if not self.mcp_server or not self.mcp_server.setup_command:
+            return
+
+        setup_cmd = self.mcp_server.get_setup_command_for_workdir(env.workdir)
+        setup_timeout = max(1, int(self.mcp_server.setup_timeout_ms / 1000))
+
+        if verbose:
+            self._console.print(
+                f"[cyan]Running setup command (timeout: {setup_timeout:.0f}s)...[/cyan]"
+            )
+
+        # Source the env file so setup_command has access to API keys etc.
+        env_file = "/tmp/.mcpbr_env.sh"
+        setup_full_cmd = f"source {shlex.quote(env_file)} && {setup_cmd}"
+        setup_exit, _setup_stdout, setup_stderr = await env.exec_command(
+            ["/bin/bash", "-c", setup_full_cmd],
+            timeout=setup_timeout,
+        )
+
+        if setup_exit != 0:
+            if verbose:
+                self._console.print(
+                    f"[yellow]⚠ Setup command exited with code {setup_exit}[/yellow]"
+                )
+                if setup_stderr:
+                    self._console.print(f"[dim]{setup_stderr[:500]}[/dim]")
+            # Non-fatal: continue with agent even if setup fails
+        elif verbose:
+            self._console.print("[green]✓ Setup command completed[/green]")
+
     async def solve(
         self,
         task: dict[str, Any],
@@ -895,34 +937,10 @@ class ClaudeCodeHarness:
                     cost_usd=None,
                 )
 
-        # Run setup_command if configured (BEFORE agent, OUTSIDE task timer).
-        # This is the right place for expensive one-time operations like
-        # pre-computing caches that should not count against timeout_seconds.
-        if self.mcp_server and self.mcp_server.setup_command:
-            setup_cmd = self.mcp_server.get_setup_command_for_workdir(env.workdir)
-            setup_timeout = int(self.mcp_server.setup_timeout_ms / 1000)
-
-            if verbose:
-                self._console.print(
-                    f"[cyan]Running setup command (timeout: {setup_timeout:.0f}s)...[/cyan]"
-                )
-
-            setup_full_cmd = f"source {shlex.quote(env_file)} && {setup_cmd}"
-            setup_exit, _setup_stdout, setup_stderr = await env.exec_command(
-                ["/bin/bash", "-c", setup_full_cmd],
-                timeout=setup_timeout,
-            )
-
-            if setup_exit != 0:
-                if verbose:
-                    self._console.print(
-                        f"[yellow]⚠ Setup command exited with code {setup_exit}[/yellow]"
-                    )
-                    if setup_stderr:
-                        self._console.print(f"[dim]{setup_stderr[:500]}[/dim]")
-                # Non-fatal: continue with agent even if setup fails
-            elif verbose:
-                self._console.print("[green]✓ Setup command completed[/green]")
+        # NOTE: setup_command is intentionally NOT run here. It must be called
+        # from the evaluation harness (harness.py) BEFORE the agent timer starts,
+        # using run_setup_command(). Running it here would include it in the
+        # asyncio.wait_for() timeout that wraps agent.solve().
 
         try:
             claude_args = [

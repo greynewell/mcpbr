@@ -133,6 +133,7 @@ async def test_run_mcp_evaluation_timeout_fallback():
     config.timeout_seconds = 10
     config.model = "claude-sonnet-4-5-20250929"
     config.agent_harness = "claude-code"  # Required field
+    config.enable_profiling = False
 
     benchmark = Mock()
     benchmark.get_prompt_template.return_value = "Test prompt"
@@ -142,9 +143,19 @@ async def test_run_mcp_evaluation_timeout_fallback():
 
     task = {"instance_id": "test-task", "problem_statement": "Fix the bug"}
 
+    # Mock _create_mcp_agent so the returned agent has run_setup_command
+    mock_agent = Mock()
+    mock_agent.run_setup_command = AsyncMock()
+
     # Simulate timeout by raising asyncio.TimeoutError
-    with patch("mcpbr.harness.asyncio.wait_for", side_effect=asyncio.TimeoutError):
+    with (
+        patch("mcpbr.harness._create_mcp_agent", return_value=mock_agent),
+        patch("mcpbr.harness.asyncio.wait_for", side_effect=asyncio.TimeoutError),
+    ):
         result = await _run_mcp_evaluation(task, config, docker_manager, benchmark, verbose=False)
+
+    # Verify setup_command was called before the timer
+    mock_agent.run_setup_command.assert_awaited_once()
 
     # Verify timeout fallback sets status field
     assert result.get("status") == "timeout"

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **setup_command runs as mcpbr user in Docker** (#386): setup_command now executes as the
+  mcpbr user instead of root, preventing EACCES permission errors when the agent accesses
+  files created during setup (e.g., npm cache)
+- **Workspace verification after copy** (#387): Added filesystem sync and file-count check
+  after copying the repo to /workspace, raising an early error if the workspace is empty
+- **setup_command failures are always visible** (#388): Non-zero exit codes from
+  setup_command now always print a warning, not just in `--verbose` mode
+
 ### Added
 
 - **Rate limiting for API calls** (#196): Intelligent rate limiting to prevent API quota exhaustion

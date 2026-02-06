@@ -85,9 +85,8 @@ class TestEnrichedSlackMessage:
         event = _make_event(
             extra={
                 "tool_stats": {
-                    "total_calls": 30,
-                    "successful_calls": 23,
-                    "failed_calls": 7,
+                    "total_tool_calls": 30,
+                    "total_failures": 7,
                     "failure_rate": 0.233,
                 },
             }

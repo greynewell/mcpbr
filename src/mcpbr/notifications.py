@@ -58,9 +58,9 @@ def _build_slack_text(event: NotificationEvent) -> str:
     # Tool stats
     tool_stats = event.extra.get("tool_stats")
     if tool_stats:
-        total = tool_stats.get("total_calls", 0)
-        success = tool_stats.get("successful_calls", 0)
-        failed = tool_stats.get("failed_calls", 0)
+        total = tool_stats.get("total_tool_calls", 0)
+        failed = tool_stats.get("total_failures", 0)
+        success = total - failed
         rate = tool_stats.get("failure_rate", 0)
         sections.append(
             f"*Tool Usage:* {total} calls ({success} ok, {failed} failed, {rate:.0%} failure rate)"

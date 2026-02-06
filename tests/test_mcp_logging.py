@@ -61,7 +61,8 @@ class TestMCPLogging:
                 1,
                 "",
                 "npx: command not found",
-            ),  # MCP registration fails
+            ),  # .mcp.json write fails
+            (0, "", ""),  # chown .mcp.json
             (0, "", ""),  # cleanup temp files
         ]
 
@@ -87,7 +88,7 @@ class TestMCPLogging:
 
         # Verify registration failure was caught
         assert result.success is False
-        assert "MCP server registration failed" in result.error
+        assert "MCP config write failed" in result.error
         assert "npx: command not found" in result.error
 
         # Verify cleanup was called
@@ -110,6 +111,7 @@ class TestMCPLogging:
             (0, "", ""),  # env file write
             (0, "", ""),  # chown env
             (1, "Server starting...\nInitialization failed", "Error: Missing API key"),
+            (0, "", ""),  # chown .mcp.json
             (0, "", ""),  # cleanup
         ]
 
@@ -133,10 +135,10 @@ class TestMCPLogging:
                 task_id="test_id",
             )
 
-        # Verify both stderr and stdout are in error message
+        # Verify stderr is in error message and stdout is captured separately
         assert "Error: Missing API key" in result.error
-        assert "Server starting" in result.error or "Initialization failed" in result.error
         assert result.stdout is not None
+        assert "Server starting" in result.stdout or "Initialization failed" in result.stdout
 
     @pytest.mark.asyncio
     async def test_mcp_timeout_cleanup(self, harness: ClaudeCodeHarness) -> None:
@@ -177,8 +179,7 @@ class TestMCPLogging:
 
         # Verify timeout was caught
         assert result.success is False
-        assert "timed out after 60s" in result.error
-        assert "failed to start or is hanging" in result.error
+        assert "Failed to write MCP configuration file" in result.error
 
         # Verify cleanup was called
         cleanup_calls = [
@@ -255,9 +256,10 @@ Debug: Cache miss for /workspace/"""
             (0, "", ""),  # chown prompt
             (0, "", ""),  # env file write
             (0, "", ""),  # chown env
-            (0, "MCP server registered successfully", ""),  # MCP registration
-            (0, "", ""),  # MCP server remove (cleanup)
-            (0, "", ""),  # rm temp files (cleanup)
+            (0, "MCP server registered successfully", ""),  # .mcp.json write
+            (0, "", ""),  # chown .mcp.json
+            (0, "", ""),  # rm .mcp.json (exit_code != 0 path)
+            (0, "", ""),  # rm temp files (finally cleanup)
         ]
 
         # Mock streaming execution with our test output

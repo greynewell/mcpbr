@@ -540,6 +540,13 @@ class HarnessConfig(BaseModel):
         default=None, description="Email config dict (smtp_host, smtp_port, from_addr, to_addrs)."
     )
 
+    @model_validator(mode="after")
+    def validate_stratified_sampling(self) -> "HarnessConfig":
+        """Ensure stratify_field is set when using stratified sampling."""
+        if self.sampling_strategy == "stratified" and not self.stratify_field:
+            raise ValueError("stratify_field is required when sampling_strategy is 'stratified'")
+        return self
+
     @field_validator("checkpoint_interval")
     @classmethod
     def validate_checkpoint_interval(cls, v: int) -> int:

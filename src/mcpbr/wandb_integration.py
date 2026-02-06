@@ -63,33 +63,34 @@ def log_evaluation(
         tags=tags or [config.get("benchmark", ""), config.get("model", "")],
     )
 
-    # Log summary metrics
-    wandb.log(
-        {
-            "resolution_rate": summary.get("rate", 0),
-            "total_tasks": summary.get("total", 0),
-            "resolved_tasks": summary.get("resolved", 0),
-            "total_cost": summary.get("total_cost", 0),
-            "cost_per_task": summary.get("cost_per_task", 0),
-        }
-    )
+    try:
+        # Log summary metrics
+        wandb.log(
+            {
+                "resolution_rate": summary.get("rate", 0),
+                "total_tasks": summary.get("total", 0),
+                "resolved_tasks": summary.get("resolved", 0),
+                "total_cost": summary.get("total_cost", 0),
+                "cost_per_task": summary.get("cost_per_task", 0),
+            }
+        )
 
-    # Log per-task results as a W&B Table
-    if tasks:
-        columns = ["instance_id", "resolved", "cost", "error"]
-        table_data = []
-        for task in tasks:
-            mcp = task.get("mcp", {}) or {}
-            table_data.append(
-                [
-                    task.get("instance_id", ""),
-                    mcp.get("resolved", False),
-                    mcp.get("cost", 0),
-                    mcp.get("error", ""),
-                ]
-            )
+        # Log per-task results as a W&B Table
+        if tasks:
+            columns = ["instance_id", "resolved", "cost", "error"]
+            table_data = []
+            for task in tasks:
+                mcp = task.get("mcp", {}) or {}
+                table_data.append(
+                    [
+                        task.get("instance_id", ""),
+                        mcp.get("resolved", False),
+                        mcp.get("cost", 0),
+                        mcp.get("error", ""),
+                    ]
+                )
 
-        table = wandb.Table(columns=columns, data=table_data)
-        wandb.log({"task_results": table})
-
-    wandb.finish()
+            table = wandb.Table(columns=columns, data=table_data)
+            wandb.log({"task_results": table})
+    finally:
+        wandb.finish()

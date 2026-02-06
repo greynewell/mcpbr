@@ -53,5 +53,8 @@ class RunState:
         """
         if not path.exists():
             return None
-        data = json.loads(path.read_text())
-        return cls.from_dict(data)
+        try:
+            data = json.loads(path.read_text())
+            return cls.from_dict(data)
+        except (json.JSONDecodeError, KeyError, TypeError):
+            return None

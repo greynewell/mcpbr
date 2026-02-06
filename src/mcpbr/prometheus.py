@@ -66,82 +66,31 @@ def export_metrics(
     mcp = results.get("summary", {}).get("mcp", {})
     baseline = results.get("summary", {}).get("baseline", {})
 
+    # Group all samples per metric family (Prometheus spec requires contiguous families)
+    metric_families = [
+        ("mcpbr_resolution_rate", "Task resolution rate", "gauge", "rate"),
+        ("mcpbr_tasks_total", "Total tasks evaluated", "gauge", "total"),
+        ("mcpbr_tasks_resolved", "Tasks resolved successfully", "gauge", "resolved"),
+        ("mcpbr_total_cost", "Total cost in USD", "gauge", "total_cost"),
+    ]
+
     lines = []
-
-    # MCP metrics
-    lines.append(
-        format_metric(
-            "mcpbr_resolution_rate",
-            mcp.get("rate", 0),
-            labels={**labels, "agent": "mcp"},
-            help_text="Task resolution rate",
-            metric_type="gauge",
+    for metric_name, help_text, metric_type, key in metric_families:
+        mcp_labels = {**labels, "agent": "mcp"}
+        mcp_sample = format_metric(
+            metric_name,
+            mcp.get(key, 0),
+            labels=mcp_labels,
+            help_text=help_text,
+            metric_type=metric_type,
         )
-    )
-
-    lines.append(
-        format_metric(
-            "mcpbr_tasks_total",
-            mcp.get("total", 0),
-            labels={**labels, "agent": "mcp"},
-            help_text="Total tasks evaluated",
-            metric_type="gauge",
-        )
-    )
-
-    lines.append(
-        format_metric(
-            "mcpbr_tasks_resolved",
-            mcp.get("resolved", 0),
-            labels={**labels, "agent": "mcp"},
-            help_text="Tasks resolved successfully",
-            metric_type="gauge",
-        )
-    )
-
-    lines.append(
-        format_metric(
-            "mcpbr_total_cost",
-            mcp.get("total_cost", 0),
-            labels={**labels, "agent": "mcp"},
-            help_text="Total cost in USD",
-            metric_type="gauge",
-        )
-    )
-
-    # Baseline metrics (if present)
-    if baseline:
-        lines.append(
-            format_metric(
-                "mcpbr_resolution_rate",
-                baseline.get("rate", 0),
-                labels={**labels, "agent": "baseline"},
-            )
-        )
-
-        lines.append(
-            format_metric(
-                "mcpbr_tasks_total",
-                baseline.get("total", 0),
-                labels={**labels, "agent": "baseline"},
-            )
-        )
-
-        lines.append(
-            format_metric(
-                "mcpbr_tasks_resolved",
-                baseline.get("resolved", 0),
-                labels={**labels, "agent": "baseline"},
-            )
-        )
-
-        lines.append(
-            format_metric(
-                "mcpbr_total_cost",
-                baseline.get("total_cost", 0),
-                labels={**labels, "agent": "baseline"},
-            )
-        )
+        if baseline:
+            bl_labels = {**labels, "agent": "baseline"}
+            label_str = ",".join(f'{k}="{v}"' for k, v in sorted(bl_labels.items()))
+            bl_sample = f"{metric_name}{{{label_str}}} {baseline.get(key, 0)}"
+            lines.append(mcp_sample + "\n" + bl_sample)
+        else:
+            lines.append(mcp_sample)
 
     output = "\n\n".join(lines) + "\n"
 

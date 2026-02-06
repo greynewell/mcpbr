@@ -30,7 +30,7 @@ class TestSamplingConfig:
         assert cfg.sampling_strategy == "random"
 
     def test_accepts_stratified_strategy(self):
-        cfg = self._make_config(sampling_strategy="stratified")
+        cfg = self._make_config(sampling_strategy="stratified", stratify_field="difficulty")
         assert cfg.sampling_strategy == "stratified"
 
     def test_rejects_invalid_strategy(self):
@@ -52,6 +52,10 @@ class TestSamplingConfig:
     def test_stratify_field_accepts_string(self):
         cfg = self._make_config(stratify_field="difficulty")
         assert cfg.stratify_field == "difficulty"
+
+    def test_stratified_requires_stratify_field(self):
+        with pytest.raises(ValueError, match="stratify_field is required"):
+            self._make_config(sampling_strategy="stratified")
 
 
 # ---------------------------------------------------------------------------
@@ -132,14 +136,14 @@ class TestHarnessSamplingWiring:
         assert r1 != r2
 
     @pytest.mark.asyncio
-    async def test_global_seed_fallback(self):
-        """When random_seed is None, global_seed is used."""
+    async def test_none_seed_is_nondeterministic(self):
+        """When random_seed is None, sampling is non-deterministic."""
         cfg = self._make_config(
             sampling_strategy="random",
             random_seed=None,
-            global_seed=42,
         )
-        seed = cfg.random_seed if cfg.random_seed is not None else cfg.global_seed
+        # seed=None means non-deterministic (no seeding)
+        seed = cfg.random_seed  # None
         tasks = list(FAKE_TASKS)
         result = sample_tasks(
             tasks,

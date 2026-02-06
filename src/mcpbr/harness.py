@@ -906,7 +906,7 @@ async def run_evaluation(
     if hasattr(config, "sampling_strategy") and config.sampling_strategy != "sequential":
         from .sampling import SamplingStrategy, sample_tasks
 
-        seed = config.random_seed if config.random_seed is not None else 0
+        seed = config.random_seed  # None = non-deterministic
         tasks = sample_tasks(
             tasks,
             sample_size=config.sample_size,
@@ -1444,17 +1444,21 @@ async def run_evaluation(
         if hasattr(config, "notify_email") and config.notify_email:
             notify_config["email"] = config.notify_email
         if notify_config:
+            total = len(results)
+            resolved = sum(1 for t in results if t.mcp and t.mcp.get("resolved"))
+            cost = sum((t.mcp.get("cost", 0) or 0) for t in results if t.mcp)
             event = NotificationEvent(
                 event_type="completion",
                 benchmark=config.benchmark,
                 model=config.model,
-                resolved=len([t for t in results if t.get("resolved")]),
-                total=len(results),
-                cost=sum(t.get("cost_usd", 0) or 0 for t in results),
+                total_tasks=total,
+                resolved_tasks=resolved,
+                resolution_rate=resolved / total if total > 0 else 0.0,
+                total_cost=cost,
             )
             dispatch_notification(notify_config, event)
     except Exception:
-        pass  # Notifications should never block the main flow
+        pass  # Notifications must never block the evaluation flow
 
     return EvaluationResults(
         metadata=metadata,

@@ -113,6 +113,28 @@ def main() -> None:
     pass
 
 
+def _build_results_dict(results):
+    """Convert evaluation results to a plain dict for reports and integrations."""
+    if isinstance(results, dict):
+        return results
+    if hasattr(results, "to_dict"):
+        return results.to_dict()
+    if hasattr(results, "__dict__"):
+        return {
+            "metadata": results.metadata,
+            "summary": results.summary,
+            "tasks": [
+                {
+                    "instance_id": t.instance_id,
+                    "mcp": t.mcp,
+                    "baseline": t.baseline,
+                }
+                for t in results.tasks
+            ],
+        }
+    return json.loads(json.dumps(results, default=str))
+
+
 @main.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
     "--config",
@@ -651,7 +673,11 @@ def run(
     if notify_discord:
         config.notify_discord_webhook = notify_discord
     if notify_email:
-        config.notify_email = json.loads(notify_email)
+        try:
+            config.notify_email = json.loads(notify_email)
+        except json.JSONDecodeError as e:
+            console.print(f"[red]Error: --notify-email must be valid JSON: {e}[/red]")
+            sys.exit(1)
     if wandb is not None:
         config.wandb_enabled = wandb
     if wandb_project:
@@ -904,30 +930,13 @@ To archive:
         save_xml_results(results, xml_path)
         console.print(f"[green]XML results saved to {xml_path}[/green]")
 
+    # Build results_dict once for reports and W&B
+    results_dict = None
+
     # Enhanced report generation
     if html_path or pdf_path or enhanced_md_path:
         # Convert results to dict for report generators
-        results_dict = (
-            json.loads(json.dumps(results, default=str))
-            if not isinstance(results, dict)
-            else results
-        )
-        if hasattr(results, "to_dict"):
-            results_dict = results.to_dict()
-        elif hasattr(results, "__dict__"):
-            # Build results dict from EvaluationResults object
-            results_dict = {
-                "metadata": results.metadata,
-                "summary": results.summary,
-                "tasks": [
-                    {
-                        "instance_id": t.instance_id,
-                        "mcp": t.mcp,
-                        "baseline": t.baseline,
-                    }
-                    for t in results.tasks
-                ],
-            }
+        results_dict = _build_results_dict(results)
 
     if html_path:
         from .reports import HTMLReportGenerator
@@ -962,28 +971,8 @@ To archive:
     # W&B logging (v0.10.0)
     if getattr(config, "wandb_enabled", False):
         try:
-            # Build results_dict if not already built
-            if "results_dict" not in dir():
-                results_dict = (
-                    json.loads(json.dumps(results, default=str))
-                    if not isinstance(results, dict)
-                    else results
-                )
-                if hasattr(results, "to_dict"):
-                    results_dict = results.to_dict()
-                elif hasattr(results, "__dict__"):
-                    results_dict = {
-                        "metadata": results.metadata,
-                        "summary": results.summary,
-                        "tasks": [
-                            {
-                                "instance_id": t.instance_id,
-                                "mcp": t.mcp,
-                                "baseline": t.baseline,
-                            }
-                            for t in results.tasks
-                        ],
-                    }
+            if results_dict is None:
+                results_dict = _build_results_dict(results)
             from .wandb_integration import log_evaluation
 
             log_evaluation(results_dict, project=getattr(config, "wandb_project", None))
@@ -2940,6 +2929,9 @@ def run_stop_cmd():
     state = RunState.load(state_path)
     if state is None:
         click.echo("No active run found.")
+        return
+    if not click.confirm(f"Deallocate VM {state.vm_name}?", default=False):
+        click.echo("Aborted.")
         return
     AzureProvider.stop_run(state)
     click.echo(f"VM {state.vm_name} deallocated.")

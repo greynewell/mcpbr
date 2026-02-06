@@ -165,7 +165,7 @@ def send_email_notification(config: dict[str, Any], event: NotificationEvent) ->
 
     use_tls = config.get("use_tls", True)
 
-    with smtplib.SMTP(config["smtp_host"], config.get("smtp_port", 587)) as server:
+    with smtplib.SMTP(config["smtp_host"], config.get("smtp_port", 587), timeout=30) as server:
         if use_tls:
             server.starttls()
         smtp_user = config.get("smtp_user")

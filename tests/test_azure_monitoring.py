@@ -79,6 +79,12 @@ class TestRunState:
         result = RunState.load(Path("/nonexistent/run_state.json"))
         assert result is None
 
+    def test_load_corrupt_json_returns_none(self, tmp_path):
+        path = tmp_path / "corrupt.json"
+        path.write_text("not valid json{{{")
+        result = RunState.load(path)
+        assert result is None
+
 
 class TestAzureMonitoring:
     """Azure provider monitoring methods."""

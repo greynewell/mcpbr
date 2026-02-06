@@ -458,9 +458,6 @@ class AzureProvider(InfrastructureProvider):
         Returns:
             Dict with status information from az vm show.
         """
-        import json
-        import subprocess
-
         result = subprocess.run(
             [
                 "az",
@@ -476,6 +473,7 @@ class AzureProvider(InfrastructureProvider):
             ],
             capture_output=True,
             text=True,
+            timeout=30,
         )
         if result.returncode != 0:
             return {"error": result.stderr.strip(), "status": "unknown"}
@@ -500,8 +498,6 @@ class AzureProvider(InfrastructureProvider):
         Args:
             state: RunState with vm_name and resource_group.
         """
-        import subprocess
-
         subprocess.run(
             [
                 "az",
@@ -513,6 +509,7 @@ class AzureProvider(InfrastructureProvider):
                 state.resource_group,
             ],
             check=True,
+            timeout=300,
         )
 
     async def setup(self) -> None:

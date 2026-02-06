@@ -1466,6 +1466,15 @@ async def run_evaluation(
             ]
             extra: dict[str, Any] = {"task_results": task_results}
 
+            # Include MCP server identity
+            if hasattr(config, "mcp_server") and config.mcp_server:
+                srv = config.mcp_server
+                server_desc = srv.name or "unknown"
+                if srv.command:
+                    cmd_parts = [srv.command] + (srv.args or [])
+                    server_desc += f" ({' '.join(cmd_parts)})"
+                extra["mcp_server"] = server_desc
+
             # Include tool stats if available
             if mcp_tool_stats:
                 extra["tool_stats"] = mcp_tool_stats

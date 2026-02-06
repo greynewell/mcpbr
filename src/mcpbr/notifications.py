@@ -41,6 +41,11 @@ def _build_slack_text(event: NotificationEvent) -> str:
     """
     sections = []
 
+    # MCP server info
+    mcp_server = event.extra.get("mcp_server")
+    if mcp_server:
+        sections.append(f"*MCP Server:* `{mcp_server}`")
+
     # Per-task results
     task_results = event.extra.get("task_results")
     if task_results:
@@ -126,9 +131,12 @@ def upload_slack_file(
     filename: str = "results.json",
     title: str | None = None,
 ) -> None:
-    """Upload a file to a Slack channel via the files.upload API.
+    """Upload a file to a Slack channel via the sequenced upload API.
 
-    Requires a bot token with files:write and channels:read scopes.
+    Uses the files.getUploadURLExternal → PUT → files.completeUploadExternal
+    flow (files.upload was sunset Nov 2025).
+
+    Requires a bot token with files:write scope.
 
     Args:
         bot_token: Slack bot token (xoxb-...).
@@ -137,21 +145,44 @@ def upload_slack_file(
         filename: Filename for the upload.
         title: Optional title for the file.
     """
-    response = requests.post(
-        "https://slack.com/api/files.upload",
-        headers={"Authorization": f"Bearer {bot_token}"},
-        data={
-            "channels": channel,
-            "content": content,
-            "filename": filename,
-            "title": title or filename,
+    headers = {"Authorization": f"Bearer {bot_token}"}
+    content_bytes = content.encode("utf-8")
+
+    # Step 1: Get upload URL
+    url_resp = requests.get(
+        "https://slack.com/api/files.getUploadURLExternal",
+        headers=headers,
+        params={"filename": filename, "length": len(content_bytes)},
+        timeout=30,
+    )
+    url_resp.raise_for_status()
+    url_data = url_resp.json()
+    if not url_data.get("ok"):
+        raise RuntimeError(f"Slack getUploadURLExternal failed: {url_data.get('error', 'unknown')}")
+
+    upload_url = url_data["upload_url"]
+    file_id = url_data["file_id"]
+
+    # Step 2: Upload file content
+    put_resp = requests.put(upload_url, data=content_bytes, timeout=30)
+    put_resp.raise_for_status()
+
+    # Step 3: Complete the upload
+    complete_resp = requests.post(
+        "https://slack.com/api/files.completeUploadExternal",
+        headers={**headers, "Content-Type": "application/json"},
+        json={
+            "files": [{"id": file_id, "title": title or filename}],
+            "channel_id": channel,
         },
         timeout=30,
     )
-    response.raise_for_status()
-    data = response.json()
-    if not data.get("ok"):
-        raise RuntimeError(f"Slack file upload failed: {data.get('error', 'unknown')}")
+    complete_resp.raise_for_status()
+    complete_data = complete_resp.json()
+    if not complete_data.get("ok"):
+        raise RuntimeError(
+            f"Slack completeUploadExternal failed: {complete_data.get('error', 'unknown')}"
+        )
 
 
 def create_gist_report(

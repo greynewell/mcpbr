@@ -15,6 +15,7 @@ from mcpbr.audit import (
     AuditEvent,
     AuditLogger,
     load_audit_log,
+    load_audit_log_jsonl,
 )
 
 
@@ -204,8 +205,8 @@ class TestAuditLogger:
         assert event.result == "success"
         assert event.actor == "system"
 
-    def test_log_disabled_returns_event_but_does_not_store(self) -> None:
-        """Test that logging when disabled returns an event but does not store it."""
+    def test_log_disabled_returns_none(self) -> None:
+        """Test that logging when disabled returns None."""
         config = AuditConfig(enabled=False)
         logger = AuditLogger(config)
 
@@ -214,7 +215,7 @@ class TestAuditLogger:
             resource="config.yaml",
         )
 
-        assert isinstance(event, AuditEvent)
+        assert event is None
         assert len(logger.get_events()) == 0
 
     def test_log_with_details(self) -> None:
@@ -666,6 +667,82 @@ class TestLoadAuditLog:
 
             with pytest.raises(json.JSONDecodeError):
                 load_audit_log(path)
+
+
+class TestLoadAuditLogJsonl:
+    """Tests for load_audit_log_jsonl function."""
+
+    def test_load_jsonl_from_file(self) -> None:
+        """Test loading audit events from a JSONL file."""
+        lines = [
+            json.dumps(
+                {
+                    "timestamp": "2024-01-15T10:30:00+00:00",
+                    "action": "config_loaded",
+                    "actor": "system",
+                    "resource": "config.yaml",
+                    "result": "success",
+                    "details": {},
+                    "event_id": "evt-001",
+                    "checksum": "abc123",
+                }
+            ),
+            json.dumps(
+                {
+                    "timestamp": "2024-01-15T10:31:00+00:00",
+                    "action": "benchmark_started",
+                    "actor": "user",
+                    "resource": "bench-1",
+                    "result": "success",
+                    "details": {"model": "gpt-4"},
+                    "event_id": "evt-002",
+                    "checksum": "def456",
+                }
+            ),
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "audit.jsonl"
+            path.write_text("\n".join(lines) + "\n")
+
+            loaded = load_audit_log_jsonl(path)
+
+            assert len(loaded) == 2
+            assert loaded[0].action == AuditAction.CONFIG_LOADED
+            assert loaded[0].event_id == "evt-001"
+            assert loaded[1].action == AuditAction.BENCHMARK_STARTED
+            assert loaded[1].details == {"model": "gpt-4"}
+
+    def test_load_jsonl_empty_file(self) -> None:
+        """Test loading from an empty JSONL file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "audit.jsonl"
+            path.write_text("")
+
+            loaded = load_audit_log_jsonl(path)
+            assert loaded == []
+
+    def test_load_jsonl_round_trip_with_logger(self) -> None:
+        """Test that events written by AuditLogger can be loaded by load_audit_log_jsonl."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_file = str(Path(tmpdir) / "audit.jsonl")
+            config = AuditConfig(enabled=True, log_file=log_file, tamper_proof=True)
+            logger = AuditLogger(config)
+
+            logger.log(action=AuditAction.CONFIG_LOADED, resource="config.yaml")
+            logger.log(action=AuditAction.BENCHMARK_STARTED, resource="bench-1")
+
+            loaded = load_audit_log_jsonl(Path(log_file))
+            assert len(loaded) == 2
+            assert loaded[0].action == AuditAction.CONFIG_LOADED
+            assert loaded[1].action == AuditAction.BENCHMARK_STARTED
+            assert loaded[0].checksum != ""
+            assert loaded[1].checksum != ""
+
+    def test_load_jsonl_nonexistent_file_raises(self) -> None:
+        """Test that loading from a nonexistent file raises FileNotFoundError."""
+        with pytest.raises(FileNotFoundError):
+            load_audit_log_jsonl(Path("/tmp/nonexistent_jsonl_xyz.jsonl"))
 
 
 class TestAuditIntegration:

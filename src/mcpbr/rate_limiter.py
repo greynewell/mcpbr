@@ -155,11 +155,13 @@ def parse_retry_after_header(value: str | None) -> float | None:
     # Try parsing as an HTTP-date (RFC 7231)
     # Format: "Sun, 06 Nov 1994 08:49:37 GMT"
     try:
+        import calendar
         import email.utils
 
         parsed = email.utils.parsedate(value)
         if parsed is not None:
-            retry_time = time.mktime(parsed)
+            # Use calendar.timegm since HTTP dates are GMT, not local time
+            retry_time = calendar.timegm(parsed)
             now = time.time()
             delay = retry_time - now
             return max(0.0, delay)
@@ -193,6 +195,7 @@ class RateLimiter:
 
         # Convert requests per minute to tokens per second, applying safety margin
         effective_rate = (config.max_requests_per_minute / 60.0) * config.safety_margin
+        effective_rate = max(effective_rate, 1e-9)  # Prevent division by zero
         capacity = max(1.0, config.max_requests_per_minute * config.safety_margin)
         self._bucket = TokenBucket(rate=effective_rate, capacity=capacity)
 
@@ -208,15 +211,18 @@ class RateLimiter:
         """
         self._metrics.total_requests += 1
 
+        total_wait = 0.0
         wait_time = self._bucket.consume(1.0)
-        if wait_time > 0:
-            self._metrics.throttled_requests += 1
-            self._metrics.total_wait_seconds += wait_time
+        while wait_time > 0:
+            if total_wait == 0.0:
+                self._metrics.throttled_requests += 1
+            total_wait += wait_time
             await asyncio.sleep(wait_time)
-            # After waiting, consume the token
-            self._bucket.consume(1.0)
+            # Retry consuming — another coroutine may have drained the bucket
+            wait_time = self._bucket.consume(1.0)
 
-        return wait_time
+        self._metrics.total_wait_seconds += total_wait
+        return total_wait
 
     def record_rate_limit_error(self, retry_after: float | None = None) -> None:
         """Record a 429 rate limit error from the server.

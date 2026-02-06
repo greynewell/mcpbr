@@ -80,6 +80,27 @@ class AuditConfig:
     retention_days: int | None = None
 
 
+def _parse_audit_entry(entry: dict[str, Any]) -> AuditEvent:
+    """Parse a single audit event from a dictionary.
+
+    Args:
+        entry: Dictionary containing audit event fields.
+
+    Returns:
+        Reconstructed AuditEvent instance.
+    """
+    return AuditEvent(
+        timestamp=entry["timestamp"],
+        action=AuditAction(entry["action"]),
+        actor=entry["actor"],
+        resource=entry["resource"],
+        result=entry["result"],
+        details=entry.get("details", {}),
+        event_id=entry["event_id"],
+        checksum=entry.get("checksum", ""),
+    )
+
+
 def load_audit_log(path: Path) -> list[AuditEvent]:
     """Load audit events from a JSON file.
 
@@ -97,20 +118,32 @@ def load_audit_log(path: Path) -> list[AuditEvent]:
         json.JSONDecodeError: If the file contains invalid JSON.
     """
     data = json.loads(path.read_text())
+    return [_parse_audit_entry(entry) for entry in data]
+
+
+def load_audit_log_jsonl(path: Path) -> list[AuditEvent]:
+    """Load audit events from a JSONL (JSON Lines) file.
+
+    Reads the append-only JSONL format written by AuditLogger._write_to_file,
+    where each line is a single JSON-encoded audit event.
+
+    Args:
+        path: Path to the JSONL audit log file.
+
+    Returns:
+        List of AuditEvent instances loaded from the file.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        json.JSONDecodeError: If any line contains invalid JSON.
+    """
     events: list[AuditEvent] = []
-    for entry in data:
-        events.append(
-            AuditEvent(
-                timestamp=entry["timestamp"],
-                action=AuditAction(entry["action"]),
-                actor=entry["actor"],
-                resource=entry["resource"],
-                result=entry["result"],
-                details=entry.get("details", {}),
-                event_id=entry["event_id"],
-                checksum=entry.get("checksum", ""),
-            )
-        )
+    text = path.read_text()
+    for line in text.splitlines():
+        line = line.strip()
+        if line:
+            entry = json.loads(line)
+            events.append(_parse_audit_entry(entry))
     return events
 
 
@@ -148,12 +181,14 @@ class AuditLogger:
         result: str = "success",
         actor: str = "system",
         details: dict[str, Any] | None = None,
-    ) -> AuditEvent:
+    ) -> AuditEvent | None:
         """Create and store an audit event.
 
         Builds an AuditEvent, optionally computes its HMAC checksum as part
         of the hash chain, and appends it to the internal event list. If a
         log_file is configured, the event is also written to disk.
+
+        If the action is filtered out by configuration, returns None.
 
         Args:
             action: The type of action being audited.
@@ -164,8 +199,11 @@ class AuditLogger:
 
         Returns:
             The created AuditEvent (with checksum populated if tamper_proof
-            is enabled).
+            is enabled), or None if the event was filtered out.
         """
+        if not self._should_log(action):
+            return None
+
         event = AuditEvent(
             timestamp=datetime.now(timezone.utc).isoformat(),
             action=action,
@@ -174,9 +212,6 @@ class AuditLogger:
             result=result,
             details=details if details is not None else {},
         )
-
-        if not self._should_log(action):
-            return event
 
         if self._config.tamper_proof:
             event.checksum = self._compute_checksum(event)

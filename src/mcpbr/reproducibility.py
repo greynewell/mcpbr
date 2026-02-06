@@ -168,10 +168,12 @@ def capture_environment(mcpbr_version: str, seed: int | None = None) -> Environm
 
 
 def set_global_seed(seed: int) -> None:
-    """Set a global seed for all RNG sources to ensure determinism.
+    """Set a global seed for Python's random module.
 
-    Seeds Python's built-in random module and sets the PYTHONHASHSEED
-    environment variable for hash reproducibility.
+    Seeds Python's built-in random module for deterministic random
+    operations. Also records the seed in PYTHONHASHSEED for documentation
+    purposes (note: PYTHONHASHSEED only affects hash randomization when
+    set before interpreter startup).
 
     Args:
         seed: The integer seed value to apply.
@@ -249,10 +251,20 @@ def generate_reproducibility_report(
     if config.global_seed is not None:
         set_global_seed(config.global_seed)
 
-    environment = capture_environment(
-        mcpbr_version=mcpbr_version,
-        seed=config.global_seed,
-    )
+    if config.record_environment:
+        environment = capture_environment(
+            mcpbr_version=mcpbr_version,
+            seed=config.global_seed,
+        )
+    else:
+        environment = EnvironmentSnapshot(
+            python_version="",
+            platform="",
+            platform_version="",
+            mcpbr_version=mcpbr_version,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            global_seed=config.global_seed,
+        )
 
     checksum = _compute_checksum(config, environment)
     warnings = _check_deterministic_warnings(config)

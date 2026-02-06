@@ -1,6 +1,7 @@
 """Main evaluation harness orchestrating parallel task execution."""
 
 import asyncio
+import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -29,6 +30,7 @@ from .pricing import calculate_cost
 from .profiler import PerformanceProfiler
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 
 class SimpleNamespace:
@@ -539,7 +541,15 @@ async def _run_mcp_evaluation(
         if env:
             # Track Docker teardown time
             teardown_start = time.time()
-            await env.cleanup()
+            try:
+                await asyncio.wait_for(env.cleanup(), timeout=60)
+            except (asyncio.TimeoutError, Exception) as cleanup_err:
+                logger.warning("Container cleanup failed for MCP task: %s", cleanup_err)
+                try:
+                    if hasattr(env, "container") and env.container:
+                        env.container.remove(force=True)
+                except Exception:
+                    pass
             if profiler:
                 teardown_end = time.time()
                 profiler.record_docker_teardown(teardown_end - teardown_start)
@@ -695,7 +705,15 @@ async def _run_baseline_evaluation(
         if env:
             # Track Docker teardown time
             teardown_start = time.time()
-            await env.cleanup()
+            try:
+                await asyncio.wait_for(env.cleanup(), timeout=60)
+            except (asyncio.TimeoutError, Exception) as cleanup_err:
+                logger.warning("Container cleanup failed for baseline task: %s", cleanup_err)
+                try:
+                    if hasattr(env, "container") and env.container:
+                        env.container.remove(force=True)
+                except Exception:
+                    pass
             if profiler:
                 teardown_end = time.time()
                 profiler.record_docker_teardown(teardown_end - teardown_start)

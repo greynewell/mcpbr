@@ -93,43 +93,52 @@ async def apply_patch(
 
     workdir = workdir or env.workdir
 
-    # Reset repository to clean state before applying patch
-    # The agent modified files directly, so we need to restore HEAD state
-    await env.exec_command("git reset --hard HEAD", timeout=30, workdir=workdir)
-    await env.exec_command("git clean -fd", timeout=30, workdir=workdir)
+    # Use longer timeouts for git operations — under concurrent load,
+    # Docker exec can be slow and 30s is insufficient (#399).
+    try:
+        # Reset repository to clean state before applying patch
+        # The agent modified files directly, so we need to restore HEAD state
+        await env.exec_command("git reset --hard HEAD", timeout=120, workdir=workdir)
+        await env.exec_command("git clean -fd", timeout=120, workdir=workdir)
 
-    await env.write_file("fix.patch", patch, workdir=workdir)
+        await env.write_file("fix.patch", patch, workdir=workdir)
 
-    exit_code, stdout, stderr = await env.exec_command(
-        "git apply --check fix.patch",
-        timeout=30,
-        workdir=workdir,
-    )
-
-    if exit_code != 0:
-        exit_code2, stdout2, stderr2 = await env.exec_command(
-            "git apply --check -3 fix.patch",
-            timeout=30,
-            workdir=workdir,
-        )
-        if exit_code2 != 0:
-            return False, f"Patch does not apply: {stderr or stderr2}"
         exit_code, stdout, stderr = await env.exec_command(
-            "git apply -3 fix.patch",
-            timeout=30,
-            workdir=workdir,
-        )
-    else:
-        exit_code, stdout, stderr = await env.exec_command(
-            "git apply fix.patch",
-            timeout=30,
+            "git apply --check fix.patch",
+            timeout=120,
             workdir=workdir,
         )
 
-    if exit_code != 0:
-        return False, f"Failed to apply patch: {stderr}"
+        if exit_code != 0:
+            exit_code2, stdout2, stderr2 = await env.exec_command(
+                "git apply --check -3 fix.patch",
+                timeout=120,
+                workdir=workdir,
+            )
+            if exit_code2 != 0:
+                return False, f"Patch does not apply: {stderr or stderr2}"
+            exit_code, stdout, stderr = await env.exec_command(
+                "git apply -3 fix.patch",
+                timeout=120,
+                workdir=workdir,
+            )
+        else:
+            exit_code, stdout, stderr = await env.exec_command(
+                "git apply fix.patch",
+                timeout=120,
+                workdir=workdir,
+            )
 
-    return True, ""
+        if exit_code != 0:
+            return False, f"Failed to apply patch: {stderr}"
+
+        return True, ""
+
+    except (TimeoutError, asyncio.TimeoutError):
+        # Catch exec_command timeouts here so they don't bubble up as
+        # asyncio.TimeoutError to the harness, which would misclassify
+        # this as an agent/eval timeout (#399).
+        return False, "Docker exec timed out during patch application"
 
 
 async def run_tests(
@@ -282,38 +291,43 @@ async def _apply_test_patch(
 
     workdir = workdir or env.workdir
 
-    await env.write_file("test.patch", test_patch, workdir=workdir)
+    try:
+        await env.write_file("test.patch", test_patch, workdir=workdir)
 
-    exit_code, stdout, stderr = await env.exec_command(
-        "git apply --check test.patch",
-        timeout=30,
-        workdir=workdir,
-    )
-
-    if exit_code != 0:
         exit_code, stdout, stderr = await env.exec_command(
-            "git apply --check -3 test.patch",
-            timeout=30,
+            "git apply --check test.patch",
+            timeout=120,
             workdir=workdir,
         )
+
+        if exit_code != 0:
+            exit_code, stdout, stderr = await env.exec_command(
+                "git apply --check -3 test.patch",
+                timeout=120,
+                workdir=workdir,
+            )
+            if exit_code != 0:
+                return True, ""
+            exit_code, stdout, stderr = await env.exec_command(
+                "git apply -3 test.patch",
+                timeout=120,
+                workdir=workdir,
+            )
+        else:
+            exit_code, stdout, stderr = await env.exec_command(
+                "git apply test.patch",
+                timeout=120,
+                workdir=workdir,
+            )
+
         if exit_code != 0:
             return True, ""
-        exit_code, stdout, stderr = await env.exec_command(
-            "git apply -3 test.patch",
-            timeout=30,
-            workdir=workdir,
-        )
-    else:
-        exit_code, stdout, stderr = await env.exec_command(
-            "git apply test.patch",
-            timeout=30,
-            workdir=workdir,
-        )
 
-    if exit_code != 0:
         return True, ""
 
-    return True, ""
+    except (TimeoutError, asyncio.TimeoutError):
+        # Don't let exec timeouts bubble up to the harness (#399)
+        return True, ""
 
 
 async def evaluate_patch(
@@ -356,7 +370,14 @@ async def evaluate_patch(
 
     # Skip dependency installation for pre-built images (already done)
     if not env.uses_prebuilt:
-        await _install_dependencies(env)
+        try:
+            await _install_dependencies(env)
+        except (TimeoutError, asyncio.TimeoutError):
+            return EvaluationResult(
+                resolved=False,
+                patch_applied=True,
+                error="Docker exec timed out during dependency installation",
+            )
 
     repo = task.get("repo")
 

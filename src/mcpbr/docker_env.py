@@ -592,11 +592,14 @@ CMD ["/bin/bash"]
         Returns:
             Number of top-level files/directories found (capped at 5).
         """
-        exit_code, stdout, _ = await env.exec_command(
-            "find /workspace -maxdepth 1 -mindepth 1 | head -5 | wc -l",
-            timeout=10,
-        )
-        return int(stdout.strip()) if exit_code == 0 and stdout.strip().isdigit() else 0
+        try:
+            exit_code, stdout, _ = await env.exec_command(
+                "find /workspace -maxdepth 1 -mindepth 1 | head -5 | wc -l",
+                timeout=10,
+            )
+            return int(stdout.strip()) if exit_code == 0 and stdout.strip().isdigit() else 0
+        except Exception:
+            return 0
 
     async def _copy_repo_to_workspace(self, env: TaskEnvironment) -> None:
         """Copy repo from pre-built image /testbed to /workspace for agent access.

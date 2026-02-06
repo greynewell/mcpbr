@@ -571,7 +571,7 @@ class ClaudeCodeHarness:
             return
 
         setup_cmd = self.mcp_server.get_setup_command_for_workdir(env.workdir)
-        setup_timeout = int(self.mcp_server.setup_timeout_ms / 1000)
+        setup_timeout = max(1, int(self.mcp_server.setup_timeout_ms / 1000))
 
         if verbose:
             self._console.print(

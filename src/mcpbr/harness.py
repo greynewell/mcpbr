@@ -435,7 +435,12 @@ async def _run_mcp_evaluation(
         # one-time operations (e.g. pre-computing code graphs) that must not
         # count against timeout_seconds.
         if env and hasattr(agent, "run_setup_command"):
-            await agent.run_setup_command(env, verbose=verbose)
+            try:
+                await agent.run_setup_command(env, verbose=verbose)
+            except asyncio.TimeoutError:
+                # Setup timeout is non-fatal – the agent still gets its
+                # full timeout budget even if setup didn't finish.
+                pass
 
         # Sample memory before agent execution
         if profiler:

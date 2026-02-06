@@ -154,6 +154,9 @@ async def test_run_mcp_evaluation_timeout_fallback():
     ):
         result = await _run_mcp_evaluation(task, config, docker_manager, benchmark, verbose=False)
 
+    # Verify setup_command was called before the timer
+    mock_agent.run_setup_command.assert_awaited_once()
+
     # Verify timeout fallback sets status field
     assert result.get("status") == "timeout"
     assert result.get("error") == "Timeout"

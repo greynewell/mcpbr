@@ -476,6 +476,12 @@ def _build_results_dict(results):
     default=None,
     help="GitHub token for creating Gist reports in notifications.",
 )
+@click.option(
+    "--upload-to",
+    type=str,
+    default=None,
+    help="Upload results to cloud storage. Format: 's3://bucket', 'gs://bucket', 'az://account/container'.",
+)
 @click.option("--wandb/--no-wandb", default=None, help="Enable/disable W&B logging.")
 @click.option("--wandb-project", type=str, default=None, help="W&B project name.")
 def run(
@@ -536,6 +542,7 @@ def run(
     slack_bot_token: str | None,
     slack_channel: str | None,
     github_token: str | None,
+    upload_to: str | None,
     wandb: bool | None,
     wandb_project: str | None,
 ) -> None:
@@ -990,6 +997,57 @@ To archive:
                 f"[yellow]weasyprint not installed — saved print-ready HTML to {html_fallback}[/yellow]"
             )
             console.print("[dim]Install weasyprint for PDF: pip install weasyprint[/dim]")
+
+    # Cloud storage upload
+    cloud_cfg = upload_to or getattr(config, "cloud_storage", None)
+    if cloud_cfg:
+        try:
+            from .storage.cloud import AzureBlobStorage, GCSStorage, S3Storage, create_cloud_storage
+
+            # Parse --upload-to URI or use config dict
+            if isinstance(cloud_cfg, str):
+                if cloud_cfg.startswith("s3://"):
+                    bucket = cloud_cfg[5:]
+                    storage = S3Storage(bucket=bucket)
+                elif cloud_cfg.startswith("gs://"):
+                    bucket = cloud_cfg[5:]
+                    storage = GCSStorage(bucket=bucket)
+                elif cloud_cfg.startswith("az://"):
+                    parts = cloud_cfg[5:].split("/", 1)
+                    account = parts[0]
+                    container = parts[1] if len(parts) > 1 else "mcpbr-runs"
+                    storage = AzureBlobStorage(container=container, account=account)
+                else:
+                    raise ValueError(
+                        f"Unknown cloud storage URI: {cloud_cfg}. "
+                        "Use s3://bucket, gs://bucket, or az://account/container"
+                    )
+            else:
+                storage = create_cloud_storage(cloud_cfg)
+
+            # Upload output directory contents if available
+            run_dir = output_dir or Path(f".mcpbr_run_{config.model}")
+            if run_dir.exists():
+                run_id = run_dir.name
+                uploaded = 0
+                for f in sorted(run_dir.rglob("*")):
+                    if f.is_file():
+                        rel = str(f.relative_to(run_dir))
+                        storage.upload(f, f"{run_id}/{rel}")
+                        uploaded += 1
+                console.print(
+                    f"[green]Uploaded {uploaded} files to cloud storage ({type(storage).__name__})[/green]"
+                )
+            elif output_path and output_path.exists():
+                # Fall back to uploading just the results file
+                run_id = output_path.stem
+                uri = storage.upload(output_path, f"{run_id}/results.json")
+                console.print(f"[green]Results uploaded to {uri}[/green]")
+
+        except Exception as e:
+            console.print(f"[red]Cloud storage upload failed: {e}[/red]")
+            if verbose:
+                console.print_exception()
 
     # W&B logging (v0.10.0)
     if getattr(config, "wandb_enabled", False):

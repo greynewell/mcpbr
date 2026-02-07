@@ -772,6 +772,15 @@ class HarnessConfig(BaseModel):
     wandb_enabled: bool = Field(default=False, description="Enable W&B logging.")
     wandb_project: str = Field(default="mcpbr", description="W&B project name.")
 
+    # --- Cloud Storage (v0.11.0) ---
+    cloud_storage: dict | None = Field(
+        default=None,
+        description=(
+            "Cloud storage config for auto-uploading results. "
+            "Format: {provider: 's3'|'gcs'|'azure_blob', bucket: '...', account: '...'}"
+        ),
+    )
+
     # --- Notifications (v0.10.0) ---
     notify_slack_webhook: str | None = Field(
         default=None, description="Slack webhook URL for completion notifications."

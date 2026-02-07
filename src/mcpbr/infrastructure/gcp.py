@@ -59,7 +59,7 @@ class GCPProvider(InfrastructureProvider):
         cores = self.gcp_config.cpu_cores
         memory = self.gcp_config.memory_gb
 
-        # e2-series for smaller workloads (cost-effective)
+        # e2-series for smaller workloads (cost-effective, up to 8 vCPUs)
         if cores <= 1 and memory <= 1:
             return "e2-micro"
         elif cores <= 2 and memory <= 8:
@@ -69,14 +69,10 @@ class GCPProvider(InfrastructureProvider):
         elif cores <= 8 and memory <= 32:
             return "e2-standard-8"
         # n2-series for larger workloads (better performance)
-        elif cores <= 2 and memory <= 8:
-            return "n2-standard-2"
-        elif cores <= 4 and memory <= 16:
-            return "n2-standard-4"
-        elif cores <= 8 and memory <= 32:
-            return "n2-standard-8"
-        else:
+        elif cores <= 16 and memory <= 64:
             return "n2-standard-16"
+        else:
+            return "n2-standard-32"
 
     async def _create_instance(self, machine_type: str) -> None:
         """Create GCE instance using gcloud CLI.
@@ -235,8 +231,23 @@ class GCPProvider(InfrastructureProvider):
             # Rule already exists
             return
 
-        # Create firewall rule
+        # Create firewall rule — restrict to caller's public IP when possible
         console.print("[cyan]Creating SSH firewall rule...[/cyan]")
+        source_range = "0.0.0.0/0"
+        try:
+            ip_result = subprocess.run(
+                ["curl", "-s", "--max-time", "5", "https://ifconfig.me"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if ip_result.returncode == 0 and ip_result.stdout.strip():
+                source_range = f"{ip_result.stdout.strip()}/32"
+                console.print(f"[dim]  Restricting SSH to caller IP: {source_range}[/dim]")
+        except Exception:
+            console.print("[dim]  Could not detect caller IP; allowing SSH from all sources[/dim]")
+
         create_cmd = [
             "gcloud",
             "compute",
@@ -248,7 +259,7 @@ class GCPProvider(InfrastructureProvider):
             "--target-tags",
             "mcpbr-ssh",
             "--source-ranges",
-            "0.0.0.0/0",
+            source_range,
             "--description",
             "Allow SSH access for mcpbr evaluation instances",
         ]
@@ -703,9 +714,11 @@ class GCPProvider(InfrastructureProvider):
         raw_cmd = f"{self._mcpbr_cmd()} run -c ~/config.yaml {' '.join(flags)}"
         console.print(f"[dim]Running: {raw_cmd}[/dim]")
 
-        # Wrap with bash login shell + docker group access
+        # Wrap with bash login shell + docker group access.
+        # No per-read timeout: evaluations can run for hours.
         cmd = self._wrap_cmd(raw_cmd)
         _stdin, stdout, stderr = self.ssh_client.exec_command(cmd)
+        stdout.channel.settimeout(None)
 
         # Stream output line by line
         for line in stdout:

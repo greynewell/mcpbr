@@ -45,6 +45,23 @@ class AWSProvider(InfrastructureProvider):
         self.ssh_key_path: Path | None = None
         self._error_occurred = False
 
+    @staticmethod
+    def _get_ssh_cidr() -> str:
+        """Get CIDR for SSH security group rule, restricted to caller's IP when possible."""
+        try:
+            result = subprocess.run(
+                ["curl", "-s", "--max-time", "5", "https://ifconfig.me"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return f"{result.stdout.strip()}/32"
+        except Exception:
+            pass
+        return "0.0.0.0/0"
+
     def _determine_instance_type(self) -> str:
         """Map cpu_cores/memory_gb to AWS EC2 instance type.
 
@@ -59,8 +76,8 @@ class AWSProvider(InfrastructureProvider):
         memory = self.aws_config.memory_gb
 
         # Map cores/memory to instance types
-        # t3 family: burstable general purpose
-        # m5 family: general purpose (larger instances)
+        # t3 family: burstable general purpose (up to 8 vCPUs)
+        # m5 family: general purpose (larger instances, 16+ vCPUs)
         if cores <= 1 and memory <= 1:
             return "t3.micro"
         elif cores <= 1 and memory <= 2:
@@ -73,10 +90,6 @@ class AWSProvider(InfrastructureProvider):
             return "t3.xlarge"
         elif cores <= 8 and memory <= 32:
             return "t3.2xlarge"
-        elif cores <= 4 and memory <= 16:
-            return "m5.xlarge"
-        elif cores <= 8 and memory <= 32:
-            return "m5.2xlarge"
         elif cores <= 16 and memory <= 64:
             return "m5.4xlarge"
         else:
@@ -231,7 +244,7 @@ class AWSProvider(InfrastructureProvider):
                 "--port",
                 "22",
                 "--cidr",
-                "0.0.0.0/0",
+                self._get_ssh_cidr(),
                 "--region",
                 self.aws_config.region,
             ],
@@ -695,9 +708,11 @@ class AWSProvider(InfrastructureProvider):
         raw_cmd = f"{self._mcpbr_cmd()} run -c ~/config.yaml {' '.join(flags)}"
         console.print(f"[dim]Running: {raw_cmd}[/dim]")
 
-        # Wrap with bash login shell + docker group access
+        # Wrap with bash login shell + docker group access.
+        # No per-read timeout: evaluations can run for hours.
         cmd = self._wrap_cmd(raw_cmd)
         _stdin, stdout, stderr = self.ssh_client.exec_command(cmd)
+        stdout.channel.settimeout(None)
 
         # Stream output line by line
         for line in stdout:

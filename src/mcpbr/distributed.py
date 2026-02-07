@@ -180,7 +180,7 @@ class DistributedCoordinator:
         Returns:
             Merged ``EvaluationResults`` combining output from all workers.
         """
-        ids = task_ids or self.config.task_ids or []
+        ids = task_ids if task_ids is not None else (self.config.task_ids or [])
 
         if not ids:
             logger.warning(
@@ -361,18 +361,25 @@ class DistributedCoordinator:
             for tr in wr.task_results:
                 total_tasks += 1
 
-                # Aggregate from MCP result if present.
+                # Determine if task was resolved (check MCP first, then baseline).
                 mcp = tr.get("mcp")
+                baseline = tr.get("baseline")
+                resolved = False
+                if isinstance(mcp, dict):
+                    resolved = bool(mcp.get("resolved", False))
+                elif isinstance(baseline, dict):
+                    resolved = bool(baseline.get("resolved", False))
+                if resolved:
+                    total_resolved += 1
+
+                # Aggregate cost/tokens from MCP result if present.
                 if mcp and isinstance(mcp, dict):
-                    if mcp.get("resolved"):
-                        total_resolved += 1
                     total_cost += mcp.get("cost", 0.0) or 0.0
                     tokens = mcp.get("tokens", {})
                     total_tokens_in += tokens.get("input", 0)
                     total_tokens_out += tokens.get("output", 0)
 
                 # Also aggregate from baseline if present.
-                baseline = tr.get("baseline")
                 if baseline and isinstance(baseline, dict):
                     total_cost += baseline.get("cost", 0.0) or 0.0
                     tokens = baseline.get("tokens", {})

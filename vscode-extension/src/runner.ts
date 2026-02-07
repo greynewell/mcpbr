@@ -18,6 +18,10 @@ export class BenchmarkRunner {
   }
 
   async run(configPath: string): Promise<void> {
+    if (this.isRunning) {
+      throw new Error("A benchmark is already running. Stop it before starting a new one.");
+    }
+
     const config = vscode.workspace.getConfiguration("mcpbr");
     const pythonPath = config.get<string>("pythonPath", "python3");
 

@@ -404,7 +404,8 @@ class TestKubectlBase:
     def test_kubectl_base_default(self, k8s_provider: KubernetesProvider) -> None:
         """Test default kubectl base command."""
         cmd = k8s_provider._kubectl_base()
-        assert cmd == ["kubectl"]
+        assert cmd[0].endswith("kubectl")
+        assert len(cmd) == 1
 
     def test_kubectl_base_with_context(self, k8s_provider: KubernetesProvider) -> None:
         """Test kubectl base command with context."""

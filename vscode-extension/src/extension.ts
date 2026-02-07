@@ -22,6 +22,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Register tree data providers
   vscode.window.registerTreeDataProvider("mcpbr.runs", resultsProvider);
+  vscode.window.registerTreeDataProvider("mcpbr.results", resultsProvider);
   vscode.window.registerTreeDataProvider("mcpbr.config", configProvider);
 
   // Register commands

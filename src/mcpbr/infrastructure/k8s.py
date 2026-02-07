@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import platform
+import shutil
 import subprocess
 import time
 import zipfile
@@ -103,7 +104,10 @@ class KubernetesProvider(InfrastructureProvider):
         Returns:
             List of command tokens for kubectl invocations.
         """
-        cmd = ["kubectl"]
+        kubectl = shutil.which("kubectl")
+        if not kubectl:
+            raise RuntimeError("kubectl not found on PATH")
+        cmd = [kubectl]
         context = self._cfg("context")
         if context:
             cmd.extend(["--context", context])

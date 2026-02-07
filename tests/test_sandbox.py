@@ -345,14 +345,21 @@ class TestNewSandboxFields:
         """network_allowlist should warn that it's not yet enforced (#418)."""
         import logging
 
-        with caplog.at_level(logging.WARNING):
+        sandbox_logger = logging.getLogger("mcpbr.sandbox")
+        sandbox_logger.addHandler(caplog.handler)
+        caplog.set_level(logging.WARNING, logger="mcpbr.sandbox")
+        try:
             parse_sandbox_config(
                 {
                     "level": "standard",
                     "network_allowlist": ["api.example.com"],
                 }
             )
-        assert any("network_allowlist" in m and "not yet enforced" in m for m in caplog.messages)
+            assert any(
+                "network_allowlist" in m and "not yet enforced" in m for m in caplog.messages
+            )
+        finally:
+            sandbox_logger.removeHandler(caplog.handler)
 
 
 class TestValidateSandbox:
@@ -666,17 +673,22 @@ class TestValidateSandboxStrictMode:
         """In standard mode, mismatches should warn but NOT raise (backward compat)."""
         import logging
 
-        profile = SandboxProfile(
-            cap_drop=["SYS_ADMIN", "NET_ADMIN"],
-            no_new_privileges=False,
-            security_level=SecurityLevel.STANDARD,
-        )
-        container_attrs = {"CapDrop": ["SYS_ADMIN"]}
-        with caplog.at_level(logging.WARNING):
+        sandbox_logger = logging.getLogger("mcpbr.sandbox")
+        sandbox_logger.addHandler(caplog.handler)
+        caplog.set_level(logging.WARNING, logger="mcpbr.sandbox")
+        try:
+            profile = SandboxProfile(
+                cap_drop=["SYS_ADMIN", "NET_ADMIN"],
+                no_new_privileges=False,
+                security_level=SecurityLevel.STANDARD,
+            )
+            container_attrs = {"CapDrop": ["SYS_ADMIN"]}
             valid, mismatches = validate_sandbox(container_attrs, profile)
-        assert valid is False
-        assert len(mismatches) > 0
-        assert any("cap_drop" in m for m in caplog.messages)
+            assert valid is False
+            assert len(mismatches) > 0
+            assert any("cap_drop" in m for m in caplog.messages)
+        finally:
+            sandbox_logger.removeHandler(caplog.handler)
 
     def test_permissive_mode_warns_but_does_not_raise(
         self, caplog: pytest.LogCaptureFixture

@@ -7,32 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Sandbox seccomp default-deny allowlist** (#417): Strict sandbox mode now uses a seccomp
+  allowlist (default-deny) instead of a blocklist, preventing bypass via unlisted syscalls
+- **Shell injection prevention in infrastructure providers** (#421, #422): `python_version`
+  and env key names are now validated with strict regex before interpolation into shell commands
+  in AWS and GCP providers. SSH firewall rules raise `RuntimeError` instead of falling back to
+  `0.0.0.0/0` when IP detection fails.
+- **Audit HMAC chain tamper protection** (#419): Audit log entries now use a secret HMAC key
+  and chain on recomputed checksums, making the tamper-evident chain resistant to forgery
+- **API authentication, CORS headers, and limit validation** (#420): REST API now supports
+  bearer token authentication, sends security headers (`X-Content-Type-Options: nosniff`),
+  warns when binding to `0.0.0.0`, and validates the `?limit=` query parameter
+- **Plugin registry SSRF prevention** (#428): Registry URL scheme is now validated (must be
+  `https://`) and response body size is limited to prevent SSRF and resource exhaustion
+- **Prompt scanner multi-match fix** (#423): Prompt security scanner now checks all regex
+  matches per pattern instead of stopping at the first match, preventing evasion by placing
+  benign content before malicious payloads
+- **Cloudflare Worker auth enforcement** (#426): Worker deployments now require authentication
+  by default. A secure token is auto-generated if none is provided in the config.
+- **Safer K8s DinD defaults** (#426): Docker-in-Docker sidecar uses rootless Docker image
+  (`docker:27-dind-rootless`) instead of `--privileged` by default. Privileged mode can be
+  explicitly enabled via `dind_privileged: true`.
+- **Sandbox strict mode validation** (#427): `validate_sandbox()` now raises `ValueError` in
+  strict mode when container settings don't match the security profile, instead of only logging
+
 ### Fixed
 
-- **Infrastructure resource leak fixes** (#430): Ensure infrastructure resources are cleaned up on error
-  - SFTP connections in AWS/GCP `_download_results()` now close in `finally` blocks
-  - SFTP connections in AWS/GCP `collect_artifacts()` now close in `finally` blocks
-  - Kubernetes `setup()` cleans up partially-created ConfigMaps/Secrets on failure
-- **Cloudflare Worker auth enforcement** (#426): Worker deployments now require authentication
-  by default. The generated Worker script denies access when no auth token is configured
-  (previously allowed unauthenticated access). A secure token is auto-generated if none is
-  provided in the config.
-- **Safer K8s DinD defaults** (#426): Docker-in-Docker sidecar no longer runs with
-  `--privileged` by default. Uses rootless Docker image (`docker:27-dind-rootless`) instead.
-  Privileged mode can be explicitly enabled via `dind_privileged: true` config option.
-- **PII pattern coverage and anonymization** (#431): Improved PII detection patterns in privacy module
-  - Added abbreviated/compressed IPv6 address detection (e.g., `::1`, `fe80::1`, `2001:db8::1`)
-  - Added SSN detection without dashes (standalone 9-digit numbers)
-  - Added American Express credit card detection (15-digit format with optional separators)
-  - Added international phone number detection (e.g., `+44 20 7946 0958`)
-- **Cloud storage error handling** (#429): Improved error handling and retry logic for
-  cloud storage backends (S3, GCS, Azure Blob Storage)
-  - Added retry logic with exponential backoff for transient network failures
-  - Timeout errors now raise `CloudStorageError` instead of leaking raw `TimeoutExpired`
-  - Failed downloads clean up partial/stale files to prevent corrupt data
-  - Authentication errors in `list_objects` now raise instead of silently returning empty list
-  - Added CLI-not-found handling for GCS download and Azure upload/download
-  - `upload_results` validates JSON serialization before writing temp files
+- **K8s async context crash** (#424): Replaced `run_until_complete` with `await` in K8s
+  provider async methods, fixing crashes when called from an existing event loop
+- **SQLite UPSERT timestamp preservation** (#425): Changed `INSERT OR REPLACE` to
+  `INSERT ... ON CONFLICT DO UPDATE` so `created_at` timestamps are preserved on re-runs
+- **Infrastructure resource leak fixes** (#430): SFTP connections in AWS/GCP now close in
+  `finally` blocks; Kubernetes `setup()` cleans up partial ConfigMaps/Secrets on failure
+- **PII pattern coverage** (#431): Added abbreviated IPv6, SSN without dashes, Amex credit
+  cards, and international phone number detection to the privacy module
+- **Distributed coordinator reliability** (#432): Added per-worker timeouts via
+  `asyncio.wait_for()`, config isolation with `copy.deepcopy()`, `asyncio.Lock` for shared
+  state safety, and `DistributedExecutionError` with fail-fast error propagation
+- **Cloud storage error handling** (#429): Added retry logic with exponential backoff,
+  `CloudStorageError` for timeout/auth errors, partial file cleanup on failed downloads,
+  and CLI-not-found handling for GCS/Azure
+- **network_allowlist warning** (#418): Logs a warning when `network_allowlist` is configured
+  but not yet enforced at runtime, instead of silently ignoring the setting
 
 ## [0.12.0] - 2026-02-07
 

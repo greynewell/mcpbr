@@ -525,9 +525,14 @@ class TestScanLevelValidation:
         """Unknown scan_level should produce a warning and be treated as 'full'."""
         import logging
 
-        with caplog.at_level(logging.WARNING):
+        ps_logger = logging.getLogger("mcpbr.prompt_security")
+        ps_logger.addHandler(caplog.handler)
+        caplog.set_level(logging.WARNING, logger="mcpbr.prompt_security")
+        try:
             config = PromptSecurityConfig(scan_level="turbo")
             scanner = PromptSecurityScanner(config)
+        finally:
+            ps_logger.removeHandler(caplog.handler)
 
         assert any("turbo" in record.message for record in caplog.records), (
             "Expected a warning about unknown scan_level 'turbo'"

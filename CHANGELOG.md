@@ -33,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Sandbox strict mode validation** (#427): `validate_sandbox()` now raises `ValueError` in
   strict mode when container settings don't match the security profile, instead of only logging
 
+### Changed
+
+- **Default disk size increased to 1 TB** (#434): `disk_gb` default changed from 250 to 1000
+  across AWS, GCP, and Azure providers to accommodate swe-bench-verified evaluations
+
 ### Fixed
 
 - **K8s async context crash** (#424): Replaced `run_until_complete` with `await` in K8s

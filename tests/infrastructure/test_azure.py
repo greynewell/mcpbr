@@ -18,7 +18,7 @@ def azure_config() -> AzureConfig:
         location="eastus",
         cpu_cores=8,
         memory_gb=32,
-        disk_gb=250,
+        disk_gb=1000,
         auto_shutdown=True,
         preserve_on_error=True,
     )

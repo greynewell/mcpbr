@@ -173,7 +173,7 @@ class AzureConfig(BaseModel):
         description="Memory in GB (used if vm_size not specified)",
     )
     disk_gb: int = Field(
-        default=250,
+        default=1000,
         description="Disk size in GB",
     )
     auto_shutdown: bool = Field(
@@ -272,7 +272,7 @@ class AWSConfig(BaseModel):
     )
     cpu_cores: int = Field(default=8, description="Number of CPU cores")
     memory_gb: int = Field(default=32, description="Memory in GB")
-    disk_gb: int = Field(default=250, description="EBS volume size in GB")
+    disk_gb: int = Field(default=1000, description="EBS volume size in GB")
     ami: str | None = Field(
         default=None, description="AMI ID (auto-selects Ubuntu 22.04 if not specified)"
     )
@@ -319,7 +319,7 @@ class GCPConfig(BaseModel):
         description="Memory in GB (used if machine_type not specified)",
     )
     disk_gb: int = Field(
-        default=250,
+        default=1000,
         description="Boot disk size in GB",
     )
     disk_type: str = Field(

@@ -22,7 +22,7 @@ def mock_config() -> MagicMock:
     config.infrastructure.aws.instance_type = None
     config.infrastructure.aws.cpu_cores = 8
     config.infrastructure.aws.memory_gb = 32
-    config.infrastructure.aws.disk_gb = 250
+    config.infrastructure.aws.disk_gb = 1000
     config.infrastructure.aws.auto_shutdown = True
     config.infrastructure.aws.preserve_on_error = True
     config.infrastructure.aws.env_keys_to_export = ["ANTHROPIC_API_KEY"]

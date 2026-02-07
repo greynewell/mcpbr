@@ -52,7 +52,7 @@ class TestAzureConfig:
         assert config.location == "eastus"  # default
         assert config.cpu_cores == 8  # default
         assert config.memory_gb == 32  # default
-        assert config.disk_gb == 250  # default
+        assert config.disk_gb == 1000  # default
         assert config.auto_shutdown is True  # default
         assert config.preserve_on_error is True  # default
         assert config.env_keys_to_export == ["ANTHROPIC_API_KEY"]  # default

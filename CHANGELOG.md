@@ -13,11 +13,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - SFTP connections in AWS/GCP `_download_results()` now close in `finally` blocks
   - SFTP connections in AWS/GCP `collect_artifacts()` now close in `finally` blocks
   - Kubernetes `setup()` cleans up partially-created ConfigMaps/Secrets on failure
+- **Cloudflare Worker auth enforcement** (#426): Worker deployments now require authentication
+  by default. The generated Worker script denies access when no auth token is configured
+  (previously allowed unauthenticated access). A secure token is auto-generated if none is
+  provided in the config.
+- **Safer K8s DinD defaults** (#426): Docker-in-Docker sidecar no longer runs with
+  `--privileged` by default. Uses rootless Docker image (`docker:27-dind-rootless`) instead.
+  Privileged mode can be explicitly enabled via `dind_privileged: true` config option.
 - **PII pattern coverage and anonymization** (#431): Improved PII detection patterns in privacy module
   - Added abbreviated/compressed IPv6 address detection (e.g., `::1`, `fe80::1`, `2001:db8::1`)
   - Added SSN detection without dashes (standalone 9-digit numbers)
   - Added American Express credit card detection (15-digit format with optional separators)
   - Added international phone number detection (e.g., `+44 20 7946 0958`)
+- **Cloud storage error handling** (#429): Improved error handling and retry logic for
+  cloud storage backends (S3, GCS, Azure Blob Storage)
+  - Added retry logic with exponential backoff for transient network failures
+  - Timeout errors now raise `CloudStorageError` instead of leaking raw `TimeoutExpired`
+  - Failed downloads clean up partial/stale files to prevent corrupt data
+  - Authentication errors in `list_objects` now raise instead of silently returning empty list
+  - Added CLI-not-found handling for GCS download and Azure upload/download
+  - `upload_results` validates JSON serialization before writing temp files
 
 ## [0.12.0] - 2026-02-07
 

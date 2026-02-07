@@ -57,15 +57,14 @@ DANGEROUS_CAPABILITIES = [
     "SETFCAP",  # Set file capabilities
 ]
 
-# Minimal set of capabilities needed for benchmark execution
+# Minimal set of capabilities needed for benchmark execution.
+# Intentionally excludes DAC_OVERRIDE (root-like file access), FOWNER (bypass
+# ownership checks), and NET_BIND_SERVICE (useless when network is disabled).
 MINIMAL_CAPABILITIES = [
     "CHOWN",  # Change file ownership (needed for setup)
-    "DAC_OVERRIDE",  # Bypass file permission checks (needed for test execution)
-    "FOWNER",  # Bypass permission checks on file owner operations
-    "SETGID",  # Set group ID
-    "SETUID",  # Set user ID
-    "KILL",  # Send signals to processes
-    "NET_BIND_SERVICE",  # Bind to privileged ports (needed for some MCP servers)
+    "SETGID",  # Set group ID (needed for process setup)
+    "SETUID",  # Set user ID (needed for process setup)
+    "KILL",  # Send signals to processes (needed for test runner)
 ]
 
 
@@ -73,15 +72,23 @@ MINIMAL_CAPABILITIES = [
 class SeccompProfile:
     """Seccomp (Secure Computing) profile for syscall filtering.
 
+    Supports two modes:
+    - **Allowlist (recommended)**: ``default_action="SCMP_ACT_ERRNO"`` with
+      ``allowed_syscalls`` listing the only permitted syscalls.
+    - **Blocklist (legacy)**: ``default_action="SCMP_ACT_ALLOW"`` with
+      ``blocked_syscalls`` listing syscalls to deny.
+
     Attributes:
-        default_action: Default action for syscalls not in the allow list.
+        default_action: Default action for syscalls not in any rule.
             SCMP_ACT_ERRNO blocks with EPERM, SCMP_ACT_ALLOW permits.
-        blocked_syscalls: Syscalls to explicitly block (when default is allow).
+        blocked_syscalls: Syscalls to explicitly block (blocklist mode).
+        allowed_syscalls: Syscalls to explicitly allow (allowlist mode).
         architecture: Target architecture for the profile.
     """
 
     default_action: str = "SCMP_ACT_ERRNO"
     blocked_syscalls: list[str] = field(default_factory=list)
+    allowed_syscalls: list[str] = field(default_factory=list)
     architecture: str = "SCMP_ARCH_X86_64"
 
     def to_docker_format(self) -> dict[str, Any]:
@@ -96,12 +103,22 @@ class SeccompProfile:
             "syscalls": [],
         }
 
-        if self.default_action == "SCMP_ACT_ERRNO" and not self.blocked_syscalls:
-            # If blocking by default, we need an allow list.
-            # Use Docker's default seccomp profile as base (it allows ~300 syscalls).
-            # We don't override the default — Docker applies its own seccomp by default.
+        # Allowlist mode: default-deny with explicit allow rules
+        if self.allowed_syscalls:
+            profile["syscalls"].append(
+                {
+                    "names": list(self.allowed_syscalls),
+                    "action": "SCMP_ACT_ALLOW",
+                }
+            )
             return profile
 
+        if self.default_action == "SCMP_ACT_ERRNO" and not self.blocked_syscalls:
+            # Default-deny with no allowlist — return empty profile so Docker
+            # applies its own default seccomp.
+            return profile
+
+        # Blocklist mode: default-allow with explicit deny rules
         if self.blocked_syscalls:
             profile["syscalls"].append(
                 {
@@ -114,7 +131,7 @@ class SeccompProfile:
         return profile
 
 
-# Dangerous syscalls to block in strict mode
+# Dangerous syscalls kept for reference and used by the blocklist in non-strict profiles.
 DANGEROUS_SYSCALLS = [
     "mount",  # Mount filesystems
     "umount2",  # Unmount filesystems
@@ -123,6 +140,7 @@ DANGEROUS_SYSCALLS = [
     "swapon",  # Enable swap
     "swapoff",  # Disable swap
     "kexec_load",  # Load new kernel
+    "kexec_file_load",  # Load new kernel from file
     "init_module",  # Load kernel module
     "finit_module",  # Load kernel module from fd
     "delete_module",  # Unload kernel module
@@ -134,6 +152,232 @@ DANGEROUS_SYSCALLS = [
     "personality",  # Change process execution domain
     "unshare",  # Create new namespaces
     "setns",  # Join existing namespace
+    "open_by_handle_at",  # Container escape (Shocker exploit)
+    "name_to_handle_at",  # Companion to open_by_handle_at
+    "bpf",  # Load BPF programs into kernel
+    "userfaultfd",  # Used in container escape exploits
+    "io_uring_setup",  # io_uring — frequent kernel vuln source
+    "io_uring_enter",
+    "io_uring_register",
+    "process_vm_readv",  # Read another process's memory
+    "process_vm_writev",  # Write another process's memory
+    "keyctl",  # Kernel keyring manipulation
+    "request_key",  # Kernel key management
+    "add_key",  # Add key to kernel keyring
+    "move_mount",  # Mount manipulation (Linux 5.2+)
+    "open_tree",  # Mount namespace manipulation
+    "fsopen",  # New mount API
+    "fsmount",
+    "fsconfig",
+    "clone3",  # Enhanced process creation with namespace flags
+    "lookup_dcookie",  # Information leak
+    "perf_event_open",  # Performance counters / side channels
+    "kcmp",  # Compare kernel objects between processes
+]
+
+# Syscalls explicitly allowed in strict mode (default-deny allowlist).
+# Covers what Python, shell, C/C++ compilation, and test runners need.
+STRICT_ALLOWED_SYSCALLS = [
+    # File I/O
+    "read",
+    "write",
+    "open",
+    "openat",
+    "close",
+    "lseek",
+    "pread64",
+    "pwrite64",
+    "readv",
+    "writev",
+    "stat",
+    "fstat",
+    "lstat",
+    "newfstatat",
+    "statx",
+    "access",
+    "faccessat",
+    "faccessat2",
+    "dup",
+    "dup2",
+    "dup3",
+    "pipe",
+    "pipe2",
+    "rename",
+    "renameat",
+    "renameat2",
+    "unlink",
+    "unlinkat",
+    "rmdir",
+    "mkdir",
+    "mkdirat",
+    "link",
+    "linkat",
+    "symlink",
+    "symlinkat",
+    "readlink",
+    "readlinkat",
+    "chmod",
+    "fchmod",
+    "fchmodat",
+    "chown",
+    "fchown",
+    "fchownat",
+    "truncate",
+    "ftruncate",
+    "fallocate",
+    "getcwd",
+    "chdir",
+    "fchdir",
+    "getdents",
+    "getdents64",
+    "umask",
+    "statfs",
+    "fstatfs",
+    "copy_file_range",
+    "sendfile",
+    "splice",
+    "tee",
+    "fadvise64",
+    # Memory
+    "brk",
+    "mmap",
+    "munmap",
+    "mprotect",
+    "mremap",
+    "msync",
+    "madvise",
+    "mlock",
+    "mlock2",
+    "munlock",
+    "mincore",
+    "membarrier",
+    # Process
+    "clone",
+    "fork",
+    "vfork",
+    "execve",
+    "execveat",
+    "exit",
+    "exit_group",
+    "wait4",
+    "waitid",
+    "getpid",
+    "getppid",
+    "gettid",
+    "getuid",
+    "geteuid",
+    "getgid",
+    "getegid",
+    "getgroups",
+    "setuid",
+    "setgid",
+    "setgroups",
+    "setreuid",
+    "setregid",
+    "setresuid",
+    "setresgid",
+    "getresuid",
+    "getresgid",
+    "setsid",
+    "getsid",
+    "getpgid",
+    "setpgid",
+    "getpgrp",
+    "prctl",
+    "arch_prctl",
+    "set_tid_address",
+    "set_robust_list",
+    "get_robust_list",
+    "sched_yield",
+    "sched_getaffinity",
+    "sched_setaffinity",
+    "sched_getscheduler",
+    "sched_setscheduler",
+    "sched_getparam",
+    "sched_setparam",
+    "getpriority",
+    "setpriority",
+    "capget",
+    "capset",
+    # Signals
+    "rt_sigaction",
+    "rt_sigprocmask",
+    "rt_sigreturn",
+    "rt_sigpending",
+    "rt_sigsuspend",
+    "rt_sigtimedwait",
+    "rt_sigqueueinfo",
+    "rt_tgsigqueueinfo",
+    "kill",
+    "tgkill",
+    "tkill",
+    "sigaltstack",
+    # I/O multiplexing
+    "ioctl",
+    "fcntl",
+    "poll",
+    "ppoll",
+    "select",
+    "pselect6",
+    "epoll_create",
+    "epoll_create1",
+    "epoll_ctl",
+    "epoll_wait",
+    "epoll_pwait",
+    "eventfd",
+    "eventfd2",
+    # Time
+    "clock_gettime",
+    "clock_getres",
+    "gettimeofday",
+    "time",
+    "nanosleep",
+    "clock_nanosleep",
+    "timer_create",
+    "timer_settime",
+    "timer_gettime",
+    "timer_delete",
+    "timer_getoverrun",
+    "timerfd_create",
+    "timerfd_settime",
+    "timerfd_gettime",
+    # Networking (local sockets/pipes still needed even with network disabled)
+    "socket",
+    "bind",
+    "listen",
+    "accept",
+    "accept4",
+    "connect",
+    "sendto",
+    "recvfrom",
+    "sendmsg",
+    "recvmsg",
+    "shutdown",
+    "getsockname",
+    "getpeername",
+    "socketpair",
+    "setsockopt",
+    "getsockopt",
+    "sendmmsg",
+    "recvmmsg",
+    # Misc
+    "futex",
+    "getrandom",
+    "memfd_create",
+    "inotify_init",
+    "inotify_init1",
+    "inotify_add_watch",
+    "inotify_rm_watch",
+    "signalfd",
+    "signalfd4",
+    "sysinfo",
+    "uname",
+    "getrlimit",
+    "setrlimit",
+    "prlimit64",
+    "getrusage",
+    "rseq",
+    "mprotect",
 ]
 
 
@@ -295,8 +539,8 @@ def create_profile(level: SecurityLevel | str) -> SandboxProfile:
             cap_drop=["ALL"],
             cap_add=MINIMAL_CAPABILITIES,
             seccomp=SeccompProfile(
-                default_action="SCMP_ACT_ALLOW",
-                blocked_syscalls=DANGEROUS_SYSCALLS,
+                default_action="SCMP_ACT_ERRNO",
+                allowed_syscalls=STRICT_ALLOWED_SYSCALLS,
             ),
             read_only_rootfs=True,
             tmpfs_mounts={
@@ -313,7 +557,9 @@ def create_profile(level: SecurityLevel | str) -> SandboxProfile:
                 network_mode="none",
             ),
             network_disabled=True,
-            userns_mode="host",
+            # Do not use userns_mode="host" — that shares host UIDs with the
+            # container, meaning UID 0 inside == UID 0 on the host.
+            userns_mode=None,
         )
 
     # Should not reach here due to enum exhaustiveness

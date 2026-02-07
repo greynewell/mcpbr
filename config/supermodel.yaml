@@ -8,9 +8,15 @@ mcp_server:
   command: "npx"
   args:
     - "-y"
-    - "@supermodeltools/mcp-server"
+    - "@supermodeltools/mcp-server@0.9.1"
+    - "{workdir}"
+    - "--precache"
   env:
     SUPERMODEL_API_KEY: "${SUPERMODEL_API_KEY}"
+    SUPERMODEL_BASE_URL: "https://api.supermodeltools.com"
+    SUPERMODEL_CACHE_DIR: "/tmp/supermodel-cache"
+  setup_command: "npx -y @supermodeltools/mcp-server@0.9.1 precache {workdir} --output-dir /tmp/supermodel-cache"
+  setup_timeout_ms: 900000
 
 provider: "anthropic"
 
@@ -18,9 +24,9 @@ agent_harness: "claude-code"
 
 model: "claude-sonnet-4-20250514"
 
-dataset: "SWE-bench/SWE-bench_Lite"
+benchmark: "swe-bench-verified"
 
-sample_size: 10  # Run full SWE-bench Lite dataset
+sample_size: 10
 
 timeout_seconds: 300
 

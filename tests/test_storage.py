@@ -271,3 +271,156 @@ class TestSQLiteBackend:
         backend = SQLiteBackend()
         assert str(backend.db_path).endswith("results.db")
         assert ".mcpbr" in str(backend.db_path)
+
+    async def test_upsert_run_preserves_created_at(self, sqlite_backend: SQLiteBackend) -> None:
+        """Test that upserting a run preserves the original created_at timestamp."""
+        import time
+
+        # Store initial run
+        await sqlite_backend.store_run(
+            "run-1",
+            {"benchmark": "gsm8k", "model": "m1", "provider": "anthropic"},
+            {"summary": {"pass_rate": 0.5}, "tasks": []},
+        )
+
+        run_v1 = await sqlite_backend.get_run("run-1")
+        assert run_v1 is not None
+        original_created_at = run_v1["created_at"]
+
+        # Small delay to ensure timestamps differ
+        time.sleep(0.05)
+
+        # Update the same run with new results
+        await sqlite_backend.store_run(
+            "run-1",
+            {"benchmark": "gsm8k", "model": "m1", "provider": "anthropic"},
+            {"summary": {"pass_rate": 0.8}, "tasks": []},
+        )
+
+        run_v2 = await sqlite_backend.get_run("run-1")
+        assert run_v2 is not None
+
+        # created_at must be preserved from the original insert
+        assert run_v2["created_at"] == original_created_at
+        # updated_at should be newer than created_at
+        assert run_v2["updated_at"] >= original_created_at
+        # The data should be updated
+        assert run_v2["pass_rate"] == 0.8
+
+    async def test_upsert_run_updates_updated_at(self, sqlite_backend: SQLiteBackend) -> None:
+        """Test that upserting a run updates the updated_at timestamp."""
+        import time
+
+        await sqlite_backend.store_run(
+            "run-1",
+            {"benchmark": "gsm8k", "model": "m1", "provider": "anthropic"},
+            {"summary": {"pass_rate": 0.5}, "tasks": []},
+        )
+
+        run_v1 = await sqlite_backend.get_run("run-1")
+        assert run_v1 is not None
+        original_updated_at = run_v1["updated_at"]
+
+        # Delay to ensure timestamp difference
+        time.sleep(0.05)
+
+        await sqlite_backend.store_run(
+            "run-1",
+            {"benchmark": "gsm8k", "model": "m1", "provider": "anthropic"},
+            {"summary": {"pass_rate": 0.9}, "tasks": []},
+        )
+
+        run_v2 = await sqlite_backend.get_run("run-1")
+        assert run_v2 is not None
+        assert run_v2["updated_at"] > original_updated_at
+
+    async def test_upsert_task_result_preserves_created_at(
+        self, sqlite_backend: SQLiteBackend
+    ) -> None:
+        """Test that upserting a task result preserves the original created_at."""
+        import time
+
+        # Create a parent run first
+        await sqlite_backend.store_run(
+            "run-1",
+            {"benchmark": "gsm8k", "model": "m1", "provider": "anthropic"},
+            {"summary": {}, "tasks": []},
+        )
+
+        # Store initial task result
+        await sqlite_backend.store_task_result(
+            "run-1",
+            "task-1",
+            {"status": "failed", "duration_seconds": 30.0},
+        )
+
+        # Read back the created_at directly from the database
+        conn = sqlite_backend._get_conn()
+        cursor = conn.execute(
+            "SELECT created_at FROM task_results WHERE run_id = ? AND task_id = ?",
+            ("run-1", "task-1"),
+        )
+        row = cursor.fetchone()
+        assert row is not None
+        original_created_at = row["created_at"]
+
+        time.sleep(0.05)
+
+        # Update the task result (same run_id + task_id)
+        await sqlite_backend.store_task_result(
+            "run-1",
+            "task-1",
+            {"status": "resolved", "duration_seconds": 45.0},
+        )
+
+        cursor = conn.execute(
+            "SELECT created_at FROM task_results WHERE run_id = ? AND task_id = ?",
+            ("run-1", "task-1"),
+        )
+        row = cursor.fetchone()
+        assert row is not None
+        # created_at must be preserved
+        assert row["created_at"] == original_created_at
+
+    async def test_store_run_tasks_preserve_created_at(self, sqlite_backend: SQLiteBackend) -> None:
+        """Test that re-storing a run preserves task created_at timestamps."""
+        import time
+
+        # Store a run with tasks
+        await sqlite_backend.store_run(
+            "run-1",
+            {"benchmark": "gsm8k", "model": "m1", "provider": "anthropic"},
+            {
+                "summary": {"pass_rate": 0.5},
+                "tasks": [{"instance_id": "t1", "status": "failed"}],
+            },
+        )
+
+        conn = sqlite_backend._get_conn()
+        cursor = conn.execute(
+            "SELECT created_at FROM task_results WHERE run_id = ? AND task_id = ?",
+            ("run-1", "t1"),
+        )
+        row = cursor.fetchone()
+        assert row is not None
+        original_task_created_at = row["created_at"]
+
+        time.sleep(0.05)
+
+        # Re-store the same run with updated task
+        await sqlite_backend.store_run(
+            "run-1",
+            {"benchmark": "gsm8k", "model": "m1", "provider": "anthropic"},
+            {
+                "summary": {"pass_rate": 1.0},
+                "tasks": [{"instance_id": "t1", "status": "resolved"}],
+            },
+        )
+
+        cursor = conn.execute(
+            "SELECT created_at FROM task_results WHERE run_id = ? AND task_id = ?",
+            ("run-1", "t1"),
+        )
+        row = cursor.fetchone()
+        assert row is not None
+        assert row["created_at"] == original_task_created_at

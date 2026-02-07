@@ -123,10 +123,21 @@ class SQLiteBackend(StorageBackend):
         now = datetime.now(tz=None).isoformat()
 
         conn.execute(
-            """INSERT OR REPLACE INTO runs
+            """INSERT INTO runs
             (run_id, benchmark, model, provider, config_json, results_json,
              metadata_json, pass_rate, total_tasks, resolved_tasks, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(run_id) DO UPDATE SET
+                benchmark = excluded.benchmark,
+                model = excluded.model,
+                provider = excluded.provider,
+                config_json = excluded.config_json,
+                results_json = excluded.results_json,
+                metadata_json = excluded.metadata_json,
+                pass_rate = excluded.pass_rate,
+                total_tasks = excluded.total_tasks,
+                resolved_tasks = excluded.resolved_tasks,
+                updated_at = excluded.updated_at""",
             (
                 run_id,
                 benchmark,
@@ -152,9 +163,14 @@ class SQLiteBackend(StorageBackend):
             cost = task.get("cost_usd")
 
             conn.execute(
-                """INSERT OR REPLACE INTO task_results
+                """INSERT INTO task_results
                 (run_id, task_id, status, result_json, duration_seconds, cost_usd)
-                VALUES (?, ?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(run_id, task_id) DO UPDATE SET
+                    status = excluded.status,
+                    result_json = excluded.result_json,
+                    duration_seconds = excluded.duration_seconds,
+                    cost_usd = excluded.cost_usd""",
                 (run_id, task_id, status, json.dumps(task), duration, cost),
             )
 
@@ -215,9 +231,14 @@ class SQLiteBackend(StorageBackend):
         cost = result.get("cost_usd")
 
         conn.execute(
-            """INSERT OR REPLACE INTO task_results
+            """INSERT INTO task_results
             (run_id, task_id, status, result_json, duration_seconds, cost_usd)
-            VALUES (?, ?, ?, ?, ?, ?)""",
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(run_id, task_id) DO UPDATE SET
+                status = excluded.status,
+                result_json = excluded.result_json,
+                duration_seconds = excluded.duration_seconds,
+                cost_usd = excluded.cost_usd""",
             (run_id, task_id, status, json.dumps(result), duration, cost),
         )
         conn.commit()

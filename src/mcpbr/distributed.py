@@ -8,6 +8,7 @@ See: https://github.com/greynewell/mcpbr/issues/116
 """
 
 import asyncio
+import copy
 import logging
 import time
 from dataclasses import dataclass, field
@@ -20,6 +21,23 @@ logger = logging.getLogger(__name__)
 
 # Valid infrastructure providers for distributed execution.
 SUPPORTED_PROVIDERS = ("local", "aws", "gcp", "kubernetes", "azure")
+
+# Default timeout for worker tasks (seconds). None means no timeout.
+DEFAULT_WORKER_TIMEOUT: float | None = None
+
+
+class DistributedExecutionError(Exception):
+    """Raised when one or more distributed workers fail during execution.
+
+    Attributes:
+        worker_errors: Mapping of worker_id to error message for each failed worker.
+    """
+
+    def __init__(self, worker_errors: dict[str, str]) -> None:
+        self.worker_errors = worker_errors
+        failed = len(worker_errors)
+        ids = ", ".join(sorted(worker_errors.keys()))
+        super().__init__(f"{failed} worker(s) failed: {ids}")
 
 
 class TaskPartitioner:
@@ -141,15 +159,30 @@ class DistributedCoordinator:
         config: The harness configuration. Must include an ``mcp_server`` (or
             comparison-mode servers) and a valid ``infrastructure`` section.
         num_workers: Number of parallel workers to use. Defaults to 2.
+        worker_timeout: Per-worker timeout in seconds. Workers that exceed this
+            are cancelled and reported as timed-out. ``None`` means no timeout.
+        fail_fast: If ``True``, raise ``DistributedExecutionError`` when any
+            worker fails. If ``False`` (default), errors are collected and
+            returned in the results metadata.
     """
 
-    def __init__(self, config: HarnessConfig, num_workers: int = 2) -> None:
+    def __init__(
+        self,
+        config: HarnessConfig,
+        num_workers: int = 2,
+        worker_timeout: float | None = DEFAULT_WORKER_TIMEOUT,
+        fail_fast: bool = False,
+    ) -> None:
         if num_workers < 1:
             raise ValueError("num_workers must be at least 1")
 
         self.config = config
         self.num_workers = num_workers
+        self.worker_timeout = worker_timeout
+        self.fail_fast = fail_fast
         self._provider = config.infrastructure.mode
+        # Lock protects shared mutable state during concurrent result collection.
+        self._results_lock = asyncio.Lock()
 
     @property
     def provider(self) -> str:
@@ -179,6 +212,10 @@ class DistributedCoordinator:
 
         Returns:
             Merged ``EvaluationResults`` combining output from all workers.
+
+        Raises:
+            DistributedExecutionError: If ``fail_fast`` is True and any worker
+                encounters an error (including timeout).
         """
         ids = task_ids if task_ids is not None else (self.config.task_ids or [])
 
@@ -205,7 +242,7 @@ class DistributedCoordinator:
         for idx, partition in enumerate(partitions):
             worker_id = f"worker-{idx}"
             worker_coros.append(
-                self._launch_worker(
+                self._launch_worker_with_timeout(
                     worker_id=worker_id,
                     task_ids=partition,
                     run_mcp=run_mcp,
@@ -215,20 +252,26 @@ class DistributedCoordinator:
 
         worker_results: list[WorkerResult] = await asyncio.gather(*worker_coros)
 
+        # Propagate errors if fail_fast is enabled.
+        worker_errors = {wr.worker_id: wr.error for wr in worker_results if wr.error is not None}
+        if self.fail_fast and worker_errors:
+            raise DistributedExecutionError(worker_errors)
+
         merged = self.merge_results(worker_results)
 
-        # Build final EvaluationResults
+        # Build final EvaluationResults, protected by lock for thread safety.
         task_result_objects: list[TaskResult] = []
-        for wr in worker_results:
-            for tr in wr.task_results:
-                instance_id = tr.get("instance_id", "unknown")
-                task_result_objects.append(
-                    TaskResult(
-                        instance_id=instance_id,
-                        mcp=tr.get("mcp"),
-                        baseline=tr.get("baseline"),
+        async with self._results_lock:
+            for wr in worker_results:
+                for tr in wr.task_results:
+                    instance_id = tr.get("instance_id", "unknown")
+                    task_result_objects.append(
+                        TaskResult(
+                            instance_id=instance_id,
+                            mcp=tr.get("mcp"),
+                            baseline=tr.get("baseline"),
+                        )
                     )
-                )
 
         return EvaluationResults(
             metadata={
@@ -237,13 +280,66 @@ class DistributedCoordinator:
                 "provider": self._provider,
                 "total_tasks": len(ids),
                 "worker_durations": {wr.worker_id: wr.duration_seconds for wr in worker_results},
-                "worker_errors": {
-                    wr.worker_id: wr.error for wr in worker_results if wr.error is not None
-                },
+                "worker_errors": worker_errors,
             },
             summary=merged,
             tasks=task_result_objects,
         )
+
+    async def _launch_worker_with_timeout(
+        self,
+        worker_id: str,
+        task_ids: list[str],
+        run_mcp: bool = True,
+        run_baseline: bool = False,
+    ) -> WorkerResult:
+        """Launch a worker with optional timeout enforcement.
+
+        Wraps ``_launch_worker`` with ``asyncio.wait_for`` when a timeout is
+        configured. Timed-out workers are cancelled and a ``WorkerResult``
+        with an error message is returned.
+
+        Args:
+            worker_id: Unique identifier for the worker.
+            task_ids: Task IDs assigned to this worker.
+            run_mcp: Whether to run MCP evaluation.
+            run_baseline: Whether to run baseline evaluation.
+
+        Returns:
+            ``WorkerResult`` with per-task outputs and timing info, or an
+            error result if the worker timed out.
+        """
+        start = time.monotonic()
+        try:
+            if self.worker_timeout is not None:
+                return await asyncio.wait_for(
+                    self._launch_worker(
+                        worker_id=worker_id,
+                        task_ids=task_ids,
+                        run_mcp=run_mcp,
+                        run_baseline=run_baseline,
+                    ),
+                    timeout=self.worker_timeout,
+                )
+            else:
+                return await self._launch_worker(
+                    worker_id=worker_id,
+                    task_ids=task_ids,
+                    run_mcp=run_mcp,
+                    run_baseline=run_baseline,
+                )
+        except asyncio.TimeoutError:
+            elapsed = time.monotonic() - start
+            error_msg = (
+                f"Worker {worker_id} timed out after {self.worker_timeout}s "
+                f"({len(task_ids)} tasks assigned)"
+            )
+            logger.error(error_msg)
+            return WorkerResult(
+                worker_id=worker_id,
+                duration_seconds=elapsed,
+                error=error_msg,
+            )
 
     async def _launch_worker(
         self,
@@ -313,13 +409,17 @@ class DistributedCoordinator:
     def _create_worker_config(self, task_ids: list[str]) -> HarnessConfig:
         """Create a deep copy of the coordinator config scoped to specific tasks.
 
+        Uses ``copy.deepcopy`` on the serialized config to ensure complete
+        isolation between workers. Mutations in one worker's config cannot
+        affect the coordinator or other workers.
+
         Args:
             task_ids: The subset of task IDs for this worker.
 
         Returns:
             A new ``HarnessConfig`` with ``task_ids`` set to the given subset.
         """
-        data = self.config.model_dump()
+        data = copy.deepcopy(self.config.model_dump())
         data["task_ids"] = list(task_ids)
         return HarnessConfig(**data)
 

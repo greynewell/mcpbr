@@ -1,14 +1,20 @@
 """Tests for the distributed execution coordinator module."""
 
+import asyncio
+from unittest.mock import patch
+
 import pytest
 
-from mcpbr.config import HarnessConfig
+from mcpbr.config import HarnessConfig, MCPServerConfig
 from mcpbr.distributed import (
+    DEFAULT_WORKER_TIMEOUT,
     SUPPORTED_PROVIDERS,
     DistributedCoordinator,
+    DistributedExecutionError,
     TaskPartitioner,
     WorkerResult,
 )
+from mcpbr.harness import EvaluationResults
 
 # ===========================================================================
 # TaskPartitioner.partition tests
@@ -419,8 +425,6 @@ class TestDistributedCoordinatorInit:
     @pytest.fixture()
     def minimal_config(self) -> HarnessConfig:
         """Create a minimal HarnessConfig for testing."""
-        from mcpbr.config import MCPServerConfig
-
         return HarnessConfig(
             mcp_server=MCPServerConfig(
                 command="npx",
@@ -452,7 +456,7 @@ class TestDistributedCoordinatorInit:
 
     def test_provider_from_config(self) -> None:
         """Test that provider is read from infrastructure config."""
-        from mcpbr.config import InfrastructureConfig, MCPServerConfig
+        from mcpbr.config import InfrastructureConfig
 
         config = HarnessConfig(
             mcp_server=MCPServerConfig(command="echo", args=["test"]),
@@ -460,6 +464,26 @@ class TestDistributedCoordinatorInit:
         )
         coord = DistributedCoordinator(config, num_workers=2)
         assert coord.provider == "local"
+
+    def test_default_worker_timeout(self, minimal_config: HarnessConfig) -> None:
+        """Test that default worker_timeout matches the module constant."""
+        coord = DistributedCoordinator(minimal_config)
+        assert coord.worker_timeout == DEFAULT_WORKER_TIMEOUT
+
+    def test_custom_worker_timeout(self, minimal_config: HarnessConfig) -> None:
+        """Test setting a custom worker timeout."""
+        coord = DistributedCoordinator(minimal_config, worker_timeout=30.0)
+        assert coord.worker_timeout == 30.0
+
+    def test_fail_fast_default_false(self, minimal_config: HarnessConfig) -> None:
+        """Test that fail_fast defaults to False."""
+        coord = DistributedCoordinator(minimal_config)
+        assert coord.fail_fast is False
+
+    def test_fail_fast_enabled(self, minimal_config: HarnessConfig) -> None:
+        """Test enabling fail_fast."""
+        coord = DistributedCoordinator(minimal_config, fail_fast=True)
+        assert coord.fail_fast is True
 
 
 # ===========================================================================
@@ -473,8 +497,6 @@ class TestDistributedCoordinatorRun:
     @pytest.fixture()
     def minimal_config(self) -> HarnessConfig:
         """Create a minimal HarnessConfig for testing."""
-        from mcpbr.config import MCPServerConfig
-
         return HarnessConfig(
             mcp_server=MCPServerConfig(
                 command="npx",
@@ -489,6 +511,424 @@ class TestDistributedCoordinatorRun:
         results = await coord.run(task_ids=[])
         assert results.tasks == []
         assert results.metadata["distributed"] is True
+
+
+# ===========================================================================
+# Worker timeout tests
+# ===========================================================================
+
+
+class TestWorkerTimeout:
+    """Tests for worker timeout handling in DistributedCoordinator."""
+
+    @pytest.fixture()
+    def minimal_config(self) -> HarnessConfig:
+        """Create a minimal HarnessConfig for testing."""
+        return HarnessConfig(
+            mcp_server=MCPServerConfig(
+                command="npx",
+                args=["-y", "@modelcontextprotocol/server-filesystem", "{workdir}"],
+            ),
+        )
+
+    @pytest.mark.asyncio
+    async def test_timed_out_worker_returns_error_result(
+        self, minimal_config: HarnessConfig
+    ) -> None:
+        """Test that a worker exceeding the timeout returns a WorkerResult with error."""
+
+        async def slow_evaluation(*args, **kwargs):
+            """Simulate a worker that takes too long."""
+            await asyncio.sleep(10.0)
+            return EvaluationResults(metadata={}, summary={}, tasks=[])
+
+        coord = DistributedCoordinator(minimal_config, num_workers=1, worker_timeout=0.1)
+
+        with patch("mcpbr.distributed.DistributedCoordinator._launch_worker") as mock_worker:
+            mock_worker.side_effect = slow_evaluation
+            result = await coord.run(task_ids=["t1"])
+
+        # The result should contain timeout error info
+        assert len(result.metadata["worker_errors"]) == 1
+        assert "timed out" in list(result.metadata["worker_errors"].values())[0]
+        # No task results because worker was cancelled
+        assert result.tasks == []
+
+    @pytest.mark.asyncio
+    async def test_timed_out_worker_reports_duration(self, minimal_config: HarnessConfig) -> None:
+        """Test that timed-out workers report their actual elapsed duration."""
+
+        async def slow_evaluation(*args, **kwargs):
+            await asyncio.sleep(10.0)
+            return EvaluationResults(metadata={}, summary={}, tasks=[])
+
+        coord = DistributedCoordinator(minimal_config, num_workers=1, worker_timeout=0.1)
+
+        with patch("mcpbr.distributed.DistributedCoordinator._launch_worker") as mock_worker:
+            mock_worker.side_effect = slow_evaluation
+            result = await coord.run(task_ids=["t1"])
+
+        # Duration should be approximately the timeout value (0.1s), not 0
+        durations = result.metadata["worker_durations"]
+        assert durations["worker-0"] > 0.0
+        assert durations["worker-0"] < 1.0  # Well under 10s
+
+    @pytest.mark.asyncio
+    async def test_timeout_does_not_affect_fast_workers(
+        self, minimal_config: HarnessConfig
+    ) -> None:
+        """Test that workers completing within timeout are unaffected."""
+
+        async def fast_evaluation(*args, **kwargs):
+            await asyncio.sleep(0.01)
+            return WorkerResult(
+                worker_id=kwargs.get("worker_id", "worker-0"),
+                task_results=[{"instance_id": "t1", "mcp": {"resolved": True}}],
+                duration_seconds=0.01,
+            )
+
+        coord = DistributedCoordinator(minimal_config, num_workers=1, worker_timeout=5.0)
+
+        with patch("mcpbr.distributed.DistributedCoordinator._launch_worker") as mock_worker:
+            mock_worker.side_effect = fast_evaluation
+            result = await coord.run(task_ids=["t1"])
+
+        # No errors
+        assert result.metadata["worker_errors"] == {}
+        assert len(result.tasks) == 1
+
+    @pytest.mark.asyncio
+    async def test_no_timeout_allows_long_running_workers(
+        self, minimal_config: HarnessConfig
+    ) -> None:
+        """Test that workers run without timeout when worker_timeout is None."""
+
+        async def medium_evaluation(*args, **kwargs):
+            await asyncio.sleep(0.05)
+            return WorkerResult(
+                worker_id=kwargs.get("worker_id", "worker-0"),
+                task_results=[{"instance_id": "t1", "mcp": {"resolved": True}}],
+                duration_seconds=0.05,
+            )
+
+        coord = DistributedCoordinator(minimal_config, num_workers=1, worker_timeout=None)
+
+        with patch("mcpbr.distributed.DistributedCoordinator._launch_worker") as mock_worker:
+            mock_worker.side_effect = medium_evaluation
+            result = await coord.run(task_ids=["t1"])
+
+        assert result.metadata["worker_errors"] == {}
+        assert len(result.tasks) == 1
+
+    @pytest.mark.asyncio
+    async def test_timeout_with_multiple_workers_partial_failure(
+        self, minimal_config: HarnessConfig
+    ) -> None:
+        """Test that only the timed-out worker is marked as failed."""
+        call_count = 0
+
+        async def mixed_speed(*args, **kwargs):
+            nonlocal call_count
+            current = call_count
+            call_count += 1
+            if current == 0:
+                # Fast worker succeeds
+                await asyncio.sleep(0.01)
+                return WorkerResult(
+                    worker_id="worker-0",
+                    task_results=[{"instance_id": "t1", "mcp": {"resolved": True}}],
+                    duration_seconds=0.01,
+                )
+            else:
+                # Slow worker times out
+                await asyncio.sleep(10.0)
+                return WorkerResult(worker_id="worker-1", duration_seconds=10.0)
+
+        coord = DistributedCoordinator(minimal_config, num_workers=2, worker_timeout=0.2)
+
+        with patch("mcpbr.distributed.DistributedCoordinator._launch_worker") as mock_worker:
+            mock_worker.side_effect = mixed_speed
+            result = await coord.run(task_ids=["t1", "t2"])
+
+        # One worker succeeded, one timed out
+        assert "worker-1" in result.metadata["worker_errors"]
+        assert "timed out" in result.metadata["worker_errors"]["worker-1"]
+        # The fast worker's results should still be present
+        assert len(result.tasks) == 1
+        assert result.tasks[0].instance_id == "t1"
+
+
+# ===========================================================================
+# Shared state safety tests
+# ===========================================================================
+
+
+class TestSharedStateSafety:
+    """Tests for concurrent access safety in DistributedCoordinator."""
+
+    @pytest.fixture()
+    def minimal_config(self) -> HarnessConfig:
+        """Create a minimal HarnessConfig for testing."""
+        return HarnessConfig(
+            mcp_server=MCPServerConfig(
+                command="npx",
+                args=["-y", "@modelcontextprotocol/server-filesystem", "{workdir}"],
+            ),
+            task_ids=["seed_task"],
+        )
+
+    def test_worker_config_is_isolated(self, minimal_config: HarnessConfig) -> None:
+        """Test that _create_worker_config returns an independent copy."""
+        coord = DistributedCoordinator(minimal_config, num_workers=2)
+
+        config_a = coord._create_worker_config(["t1", "t2"])
+        config_b = coord._create_worker_config(["t3", "t4"])
+
+        # Each config should have its own task_ids
+        assert config_a.task_ids == ["t1", "t2"]
+        assert config_b.task_ids == ["t3", "t4"]
+
+        # Modifying one should not affect the other or the original
+        config_a.task_ids.append("t_extra")
+        assert config_b.task_ids == ["t3", "t4"]
+        assert minimal_config.task_ids == ["seed_task"]
+
+    def test_worker_config_deep_isolation(self, minimal_config: HarnessConfig) -> None:
+        """Test that nested config objects are deeply copied between workers."""
+        coord = DistributedCoordinator(minimal_config, num_workers=2)
+
+        config_a = coord._create_worker_config(["t1"])
+        config_b = coord._create_worker_config(["t2"])
+
+        # The MCP server args list should be independent copies
+        assert config_a.mcp_server.args == config_b.mcp_server.args
+        # But not the same object
+        config_a.mcp_server.args.append("--extra-flag")
+        assert "--extra-flag" not in config_b.mcp_server.args
+        assert "--extra-flag" not in minimal_config.mcp_server.args
+
+    @pytest.mark.asyncio
+    async def test_concurrent_workers_do_not_corrupt_shared_state(
+        self, minimal_config: HarnessConfig
+    ) -> None:
+        """Test that concurrent workers don't corrupt coordinator state."""
+        collected_configs: list[HarnessConfig] = []
+
+        async def capture_config_worker(
+            worker_id: str,
+            task_ids: list[str],
+            run_mcp: bool = True,
+            run_baseline: bool = False,
+        ) -> WorkerResult:
+            """Worker that captures its config for inspection."""
+            config = DistributedCoordinator(minimal_config, num_workers=1)._create_worker_config(
+                task_ids
+            )
+            collected_configs.append(config)
+            # Simulate some async work
+            await asyncio.sleep(0.01)
+            return WorkerResult(
+                worker_id=worker_id,
+                task_results=[{"instance_id": tid} for tid in task_ids],
+                duration_seconds=0.01,
+            )
+
+        coord = DistributedCoordinator(minimal_config, num_workers=3)
+
+        with patch.object(coord, "_launch_worker", side_effect=capture_config_worker):
+            result = await coord.run(task_ids=["t1", "t2", "t3"])
+
+        # All tasks should be present in results
+        result_ids = sorted([t.instance_id for t in result.tasks])
+        assert result_ids == ["t1", "t2", "t3"]
+
+    @pytest.mark.asyncio
+    async def test_results_lock_exists(self, minimal_config: HarnessConfig) -> None:
+        """Test that the coordinator has an asyncio Lock for result assembly."""
+        coord = DistributedCoordinator(minimal_config, num_workers=2)
+        assert hasattr(coord, "_results_lock")
+        assert isinstance(coord._results_lock, asyncio.Lock)
+
+
+# ===========================================================================
+# Error propagation tests
+# ===========================================================================
+
+
+class TestErrorPropagation:
+    """Tests for worker error propagation in DistributedCoordinator."""
+
+    @pytest.fixture()
+    def minimal_config(self) -> HarnessConfig:
+        """Create a minimal HarnessConfig for testing."""
+        return HarnessConfig(
+            mcp_server=MCPServerConfig(
+                command="npx",
+                args=["-y", "@modelcontextprotocol/server-filesystem", "{workdir}"],
+            ),
+        )
+
+    @pytest.mark.asyncio
+    async def test_worker_error_surfaces_in_metadata(self, minimal_config: HarnessConfig) -> None:
+        """Test that worker errors appear in the result metadata."""
+
+        async def failing_worker(*args, **kwargs):
+            return WorkerResult(
+                worker_id="worker-0",
+                duration_seconds=0.5,
+                error="Connection refused",
+            )
+
+        coord = DistributedCoordinator(minimal_config, num_workers=1)
+
+        with patch("mcpbr.distributed.DistributedCoordinator._launch_worker") as mock:
+            mock.side_effect = failing_worker
+            result = await coord.run(task_ids=["t1"])
+
+        assert "worker-0" in result.metadata["worker_errors"]
+        assert "Connection refused" in result.metadata["worker_errors"]["worker-0"]
+
+    @pytest.mark.asyncio
+    async def test_fail_fast_raises_distributed_execution_error(
+        self, minimal_config: HarnessConfig
+    ) -> None:
+        """Test that fail_fast=True raises DistributedExecutionError on worker failure."""
+
+        async def failing_worker(*args, **kwargs):
+            return WorkerResult(
+                worker_id="worker-0",
+                duration_seconds=0.1,
+                error="Out of memory",
+            )
+
+        coord = DistributedCoordinator(minimal_config, num_workers=1, fail_fast=True)
+
+        with patch("mcpbr.distributed.DistributedCoordinator._launch_worker") as mock:
+            mock.side_effect = failing_worker
+            with pytest.raises(DistributedExecutionError) as exc_info:
+                await coord.run(task_ids=["t1"])
+
+        assert "worker-0" in exc_info.value.worker_errors
+        assert exc_info.value.worker_errors["worker-0"] == "Out of memory"
+        assert "1 worker(s) failed" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_fail_fast_with_multiple_failures(self, minimal_config: HarnessConfig) -> None:
+        """Test fail_fast with multiple worker failures includes all errors."""
+        call_count = 0
+
+        async def all_fail(*args, **kwargs):
+            nonlocal call_count
+            wid = f"worker-{call_count}"
+            call_count += 1
+            return WorkerResult(
+                worker_id=wid,
+                duration_seconds=0.1,
+                error=f"Error in {wid}",
+            )
+
+        coord = DistributedCoordinator(minimal_config, num_workers=2, fail_fast=True)
+
+        with patch("mcpbr.distributed.DistributedCoordinator._launch_worker") as mock:
+            mock.side_effect = all_fail
+            with pytest.raises(DistributedExecutionError) as exc_info:
+                await coord.run(task_ids=["t1", "t2"])
+
+        assert len(exc_info.value.worker_errors) == 2
+        assert "2 worker(s) failed" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_fail_fast_false_collects_errors_without_raising(
+        self, minimal_config: HarnessConfig
+    ) -> None:
+        """Test that fail_fast=False collects errors silently in results."""
+
+        async def failing_worker(*args, **kwargs):
+            return WorkerResult(
+                worker_id="worker-0",
+                duration_seconds=0.1,
+                error="Disk full",
+            )
+
+        coord = DistributedCoordinator(minimal_config, num_workers=1, fail_fast=False)
+
+        with patch("mcpbr.distributed.DistributedCoordinator._launch_worker") as mock:
+            mock.side_effect = failing_worker
+            # Should NOT raise
+            result = await coord.run(task_ids=["t1"])
+
+        assert "worker-0" in result.metadata["worker_errors"]
+        assert result.metadata["worker_errors"]["worker-0"] == "Disk full"
+
+    @pytest.mark.asyncio
+    async def test_timeout_error_propagated_with_fail_fast(
+        self, minimal_config: HarnessConfig
+    ) -> None:
+        """Test that timeout errors are propagated when fail_fast is True."""
+
+        async def slow_worker(*args, **kwargs):
+            await asyncio.sleep(10.0)
+            return WorkerResult(worker_id="worker-0", duration_seconds=10.0)
+
+        coord = DistributedCoordinator(
+            minimal_config, num_workers=1, worker_timeout=0.1, fail_fast=True
+        )
+
+        with patch("mcpbr.distributed.DistributedCoordinator._launch_worker") as mock:
+            mock.side_effect = slow_worker
+            with pytest.raises(DistributedExecutionError) as exc_info:
+                await coord.run(task_ids=["t1"])
+
+        assert "worker-0" in exc_info.value.worker_errors
+        assert "timed out" in exc_info.value.worker_errors["worker-0"]
+
+    def test_distributed_execution_error_attributes(self) -> None:
+        """Test DistributedExecutionError stores worker errors correctly."""
+        errors = {"worker-0": "OOM", "worker-2": "Network error"}
+        exc = DistributedExecutionError(errors)
+        assert exc.worker_errors == errors
+        assert "2 worker(s) failed" in str(exc)
+        assert "worker-0" in str(exc)
+        assert "worker-2" in str(exc)
+
+    @pytest.mark.asyncio
+    async def test_partial_success_preserves_good_results(
+        self, minimal_config: HarnessConfig
+    ) -> None:
+        """Test that successful worker results are preserved when others fail."""
+        call_count = 0
+
+        async def mixed_results(*args, **kwargs):
+            nonlocal call_count
+            current = call_count
+            call_count += 1
+            if current == 0:
+                return WorkerResult(
+                    worker_id="worker-0",
+                    task_results=[{"instance_id": "t1", "mcp": {"resolved": True, "cost": 0.05}}],
+                    duration_seconds=1.0,
+                )
+            else:
+                return WorkerResult(
+                    worker_id="worker-1",
+                    duration_seconds=0.5,
+                    error="Worker crashed",
+                )
+
+        coord = DistributedCoordinator(minimal_config, num_workers=2, fail_fast=False)
+
+        with patch("mcpbr.distributed.DistributedCoordinator._launch_worker") as mock:
+            mock.side_effect = mixed_results
+            result = await coord.run(task_ids=["t1", "t2"])
+
+        # Good results are preserved
+        assert len(result.tasks) == 1
+        assert result.tasks[0].instance_id == "t1"
+        # Error is recorded
+        assert "worker-1" in result.metadata["worker_errors"]
+        # Summary reflects only successful tasks
+        assert result.summary["total_tasks"] == 1
+        assert result.summary["total_resolved"] == 1
 
 
 # ===========================================================================
@@ -510,3 +950,7 @@ class TestModuleConstants:
     def test_supported_providers_is_tuple(self) -> None:
         """Test that SUPPORTED_PROVIDERS is immutable (tuple)."""
         assert isinstance(SUPPORTED_PROVIDERS, tuple)
+
+    def test_default_worker_timeout_value(self) -> None:
+        """Test that DEFAULT_WORKER_TIMEOUT is None (no timeout by default)."""
+        assert DEFAULT_WORKER_TIMEOUT is None

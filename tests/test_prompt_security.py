@@ -304,6 +304,31 @@ class TestPromptSecurityScanner:
         assert result.has_findings is True
         assert any(f.pattern_name == "custom_bad_word" for f in result.findings)
 
+    def test_malformed_custom_pattern_skipped(self) -> None:
+        """Malformed custom patterns should be skipped without crashing."""
+        config = PromptSecurityConfig(
+            custom_patterns=[
+                {"severity": "high"},  # Missing name and pattern
+                {"name": "bad_severity", "pattern": "x", "severity": "nonexistent"},
+                {"name": "bad_regex", "pattern": "[invalid(", "severity": "high"},
+                {
+                    "name": "valid_one",
+                    "pattern": r"valid_match",
+                    "severity": "high",
+                    "description": "Valid pattern",
+                },
+            ],
+        )
+        scanner = PromptSecurityScanner(config)
+        task = {
+            "instance_id": "test-malformed",
+            "problem_statement": "This has valid_match in it.",
+        }
+        result = scanner.scan_task(task)
+        # Only the valid pattern should match
+        assert result.has_findings is True
+        assert any(f.pattern_name == "valid_one" for f in result.findings)
+
     def test_allowlist_suppresses_match(self) -> None:
         config = PromptSecurityConfig(
             allowlist_patterns=[r"ignore all previous instructions"],

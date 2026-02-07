@@ -159,6 +159,7 @@ class SandboxProfile:
         device_read_bps: I/O rate limit for device reads in bytes per second.
         device_write_bps: I/O rate limit for device writes in bytes per second.
         network_allowlist: Allowed hosts when using allowlist network mode.
+            Parsed from config for future enforcement; not yet applied at runtime.
     """
 
     name: str = "standard"
@@ -216,7 +217,9 @@ class SandboxProfile:
         if self.userns_mode:
             kwargs["userns_mode"] = self.userns_mode
 
-        # I/O rate limits (applied to all block devices)
+        # I/O rate limits — uses /dev/sda as the default block device path.
+        # Docker silently ignores limits if the device doesn't exist, so this
+        # acts as a best-effort control for standard environments.
         if self.device_read_bps is not None:
             kwargs["device_read_bps"] = [{"Path": "/dev/sda", "Rate": self.device_read_bps}]
         if self.device_write_bps is not None:

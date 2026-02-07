@@ -617,6 +617,12 @@ CMD ["/bin/bash"]
                 )
             except Exception as e:
                 logger.warning("Sandbox validation failed: %s", e)
+                self._audit_logger.log(
+                    action=AuditAction.SANDBOX_VALIDATED,
+                    resource=container_name,
+                    result="error",
+                    details={"valid": False, "error": str(e)},
+                )
 
         env = TaskEnvironment(
             container=container,

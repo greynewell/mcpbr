@@ -224,23 +224,23 @@ class PromptSecurityScanner:
 
         # Add custom patterns
         for custom in config.custom_patterns:
-            severity = FindingSeverity(custom.get("severity", "medium"))
-            if config.scan_level == "minimal" and severity not in (
-                FindingSeverity.HIGH,
-                FindingSeverity.CRITICAL,
-            ):
-                continue
-            pat = _DetectionPattern(
-                name=custom["name"],
-                pattern=custom["pattern"],
-                severity=severity,
-                description=custom.get("description", "Custom pattern match"),
-            )
             try:
+                severity = FindingSeverity(custom.get("severity", "medium"))
+                if config.scan_level == "minimal" and severity not in (
+                    FindingSeverity.HIGH,
+                    FindingSeverity.CRITICAL,
+                ):
+                    continue
+                pat = _DetectionPattern(
+                    name=custom["name"],
+                    pattern=custom["pattern"],
+                    severity=severity,
+                    description=custom.get("description", "Custom pattern match"),
+                )
                 compiled = re.compile(pat.pattern)
                 self._compiled_patterns.append((pat, compiled))
-            except re.error as e:
-                logger.warning("Failed to compile custom pattern %s: %s", pat.name, e)
+            except (re.error, KeyError, ValueError) as e:
+                logger.warning("Failed to load custom pattern %s: %s", custom.get("name", "?"), e)
 
         # Compile allowlist patterns
         for allowlist_pat in config.allowlist_patterns:

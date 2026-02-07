@@ -1262,8 +1262,7 @@ async def run_evaluation(
                             },
                         )
                     cost = calculate_cost(config.model, 0, 0)
-                    blocked_result = TaskResult(instance_id=instance_id)
-                    blocked_result.mcp = {
+                    blocked_dict = {
                         "resolved": False,
                         "patch_applied": False,
                         "error": f"Blocked by prompt security scanner: "
@@ -1274,6 +1273,14 @@ async def run_evaluation(
                         "cost": cost if cost is not None else 0.0,
                         "security_blocked": True,
                     }
+                    blocked_result = TaskResult(instance_id=instance_id)
+                    if config.comparison_mode:
+                        blocked_result.mcp_server_a = blocked_dict
+                        blocked_result.mcp_server_b = dict(blocked_dict)
+                    else:
+                        blocked_result.mcp = blocked_dict
+                    if run_baseline:
+                        blocked_result.baseline = dict(blocked_dict)
                     return blocked_result
 
         async with semaphore:

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Eval started notifications** (#413): Notifications are now sent when an evaluation begins,
+  including benchmark name, model, task count, concurrency, and infrastructure mode
+- **Infrastructure lifecycle notifications** (#414): `infra_provisioned` and `infra_teardown`
+  events notify when cloud VMs are provisioned (with SSH command) and torn down
+- **Progress notifications** (#415): Periodic progress updates during long-running evaluations,
+  configurable via `notify_progress_interval` (every N tasks) and
+  `notify_progress_time_minutes` (every N minutes). Includes completed/total counts, elapsed
+  time, ETA, and running cost
+- **Failure notifications** (#416): Immediate notification when an evaluation fails with error
+  details, completed task count, and last successful task ID
+
 ### Security
 
 - **Sandbox seccomp default-deny allowlist** (#417): Strict sandbox mode now uses a seccomp

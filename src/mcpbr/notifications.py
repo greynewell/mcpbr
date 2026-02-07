@@ -1,8 +1,9 @@
 """General notification system for evaluation events.
 
-Supports Slack, Discord, and Email notifications for completion and regression
-events. Failures are caught and logged — notifications never raise exceptions
-to the caller.
+Supports Slack, Discord, and Email notifications for completion, regression,
+and lifecycle events (eval_started, progress, failure, infra_provisioned,
+infra_teardown). Failures are caught and logged — notifications never raise
+exceptions to the caller.
 """
 
 import logging
@@ -15,17 +16,22 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+# Event types that represent lifecycle events (not completion/regression)
+LIFECYCLE_EVENT_TYPES = frozenset(
+    {"eval_started", "progress", "failure", "infra_provisioned", "infra_teardown"}
+)
+
 
 @dataclass
 class NotificationEvent:
     """Event payload for notifications."""
 
-    event_type: str  # "completion" or "regression"
+    event_type: str  # "completion", "regression", or lifecycle types
     benchmark: str
     model: str
-    total_tasks: int
-    resolved_tasks: int
-    resolution_rate: float
+    total_tasks: int = 0
+    resolved_tasks: int = 0
+    resolution_rate: float = 0.0
     total_cost: float | None = None
     runtime_seconds: float | None = None
     regression_count: int | None = None
@@ -74,6 +80,227 @@ def _build_slack_text(event: NotificationEvent) -> str:
     return "\n\n".join(sections)
 
 
+def _format_lifecycle_slack_text(event: NotificationEvent) -> str:
+    """Build Slack text for lifecycle events (non-completion).
+
+    Formats eval_started, progress, failure, infra_provisioned, and
+    infra_teardown events using fields from event.extra.
+    """
+    extra = event.extra
+    et = event.event_type
+
+    if et == "eval_started":
+        parts = [f"\U0001f680 *Eval Started:* {event.benchmark}"]
+        parts.append(f"*Model:* {event.model}")
+        if extra.get("total_tasks"):
+            parts.append(f"*Tasks:* {extra['total_tasks']}")
+        if extra.get("max_concurrent"):
+            parts.append(f"*Concurrency:* {extra['max_concurrent']}")
+        if extra.get("infrastructure_mode"):
+            parts.append(f"*Infra:* {extra['infrastructure_mode']}")
+        if extra.get("mcp_server"):
+            parts.append(f"*MCP Server:* `{extra['mcp_server']}`")
+        return "\n".join(parts)
+
+    if et == "infra_provisioned":
+        parts = ["\U0001f5a5\ufe0f *Infrastructure Provisioned*"]
+        if extra.get("vm_name"):
+            parts.append(f"*VM:* {extra['vm_name']}")
+        if extra.get("ip"):
+            parts.append(f"*IP:* {extra['ip']}")
+        if extra.get("region"):
+            parts.append(f"*Region:* {extra['region']}")
+        if extra.get("provisioning_time"):
+            parts.append(f"*Provisioning Time:* {extra['provisioning_time']:.1f}s")
+        if extra.get("ssh_cmd"):
+            parts.append(f"*SSH:* `{extra['ssh_cmd']}`")
+        return "\n".join(parts)
+
+    if et == "infra_teardown":
+        parts = ["\u2b07\ufe0f *Infrastructure Teardown*"]
+        parts.append(f"*Benchmark:* {event.benchmark}")
+        if extra.get("vm_name"):
+            parts.append(f"*VM:* {extra['vm_name']}")
+        return "\n".join(parts)
+
+    if et == "progress":
+        completed = extra.get("completed", 0)
+        total = extra.get("total", 0)
+        parts = [f"\U0001f4ca *Progress:* {event.benchmark}"]
+        parts.append(f"*Completed:* {completed}/{total}")
+        if extra.get("elapsed_seconds"):
+            mins = extra["elapsed_seconds"] / 60
+            parts.append(f"*Elapsed:* {mins:.1f} min")
+        if extra.get("estimated_remaining_seconds"):
+            mins = extra["estimated_remaining_seconds"] / 60
+            parts.append(f"*ETA:* {mins:.1f} min remaining")
+        if extra.get("running_cost") is not None:
+            parts.append(f"*Cost so far:* ${extra['running_cost']:.2f}")
+        return "\n".join(parts)
+
+    if et == "failure":
+        parts = ["\u274c *Evaluation Failed*"]
+        parts.append(f"*Benchmark:* {event.benchmark}")
+        parts.append(f"*Model:* {event.model}")
+        if extra.get("error"):
+            parts.append(f"*Error:* {extra['error']}")
+        if extra.get("completed_tasks") is not None:
+            total = extra.get("total_tasks", "?")
+            parts.append(f"*Completed:* {extra['completed_tasks']}/{total}")
+        if extra.get("last_successful_task"):
+            parts.append(f"*Last Successful:* `{extra['last_successful_task']}`")
+        return "\n".join(parts)
+
+    return ""
+
+
+def _format_lifecycle_discord_description(event: NotificationEvent) -> str:
+    """Build Discord embed description for lifecycle events."""
+    extra = event.extra
+    et = event.event_type
+
+    if et == "eval_started":
+        parts = [f"**Model:** {event.model}"]
+        if extra.get("total_tasks"):
+            parts.append(f"**Tasks:** {extra['total_tasks']}")
+        if extra.get("max_concurrent"):
+            parts.append(f"**Concurrency:** {extra['max_concurrent']}")
+        if extra.get("infrastructure_mode"):
+            parts.append(f"**Infra:** {extra['infrastructure_mode']}")
+        if extra.get("mcp_server"):
+            parts.append(f"**MCP Server:** `{extra['mcp_server']}`")
+        return "\n".join(parts)
+
+    if et == "infra_provisioned":
+        parts = []
+        if extra.get("vm_name"):
+            parts.append(f"**VM:** {extra['vm_name']}")
+        if extra.get("ip"):
+            parts.append(f"**IP:** {extra['ip']}")
+        if extra.get("region"):
+            parts.append(f"**Region:** {extra['region']}")
+        if extra.get("provisioning_time"):
+            parts.append(f"**Provisioning Time:** {extra['provisioning_time']:.1f}s")
+        if extra.get("ssh_cmd"):
+            parts.append(f"**SSH:** `{extra['ssh_cmd']}`")
+        return "\n".join(parts)
+
+    if et == "infra_teardown":
+        parts = [f"**Benchmark:** {event.benchmark}"]
+        if extra.get("vm_name"):
+            parts.append(f"**VM:** {extra['vm_name']}")
+        return "\n".join(parts)
+
+    if et == "progress":
+        completed = extra.get("completed", 0)
+        total = extra.get("total", 0)
+        parts = [f"**Completed:** {completed}/{total}"]
+        if extra.get("elapsed_seconds"):
+            mins = extra["elapsed_seconds"] / 60
+            parts.append(f"**Elapsed:** {mins:.1f} min")
+        if extra.get("estimated_remaining_seconds"):
+            mins = extra["estimated_remaining_seconds"] / 60
+            parts.append(f"**ETA:** {mins:.1f} min remaining")
+        if extra.get("running_cost") is not None:
+            parts.append(f"**Cost so far:** ${extra['running_cost']:.2f}")
+        return "\n".join(parts)
+
+    if et == "failure":
+        parts = [f"**Benchmark:** {event.benchmark}", f"**Model:** {event.model}"]
+        if extra.get("error"):
+            parts.append(f"**Error:** {extra['error']}")
+        if extra.get("completed_tasks") is not None:
+            total = extra.get("total_tasks", "?")
+            parts.append(f"**Completed:** {extra['completed_tasks']}/{total}")
+        if extra.get("last_successful_task"):
+            parts.append(f"**Last Successful:** `{extra['last_successful_task']}`")
+        return "\n".join(parts)
+
+    return ""
+
+
+def _format_lifecycle_email_body(event: NotificationEvent) -> str:
+    """Build plain-text email body for lifecycle events."""
+    extra = event.extra
+    et = event.event_type
+
+    if et == "eval_started":
+        lines = [f"Eval Started: {event.benchmark}", f"Model: {event.model}"]
+        if extra.get("total_tasks"):
+            lines.append(f"Tasks: {extra['total_tasks']}")
+        if extra.get("max_concurrent"):
+            lines.append(f"Concurrency: {extra['max_concurrent']}")
+        if extra.get("infrastructure_mode"):
+            lines.append(f"Infrastructure: {extra['infrastructure_mode']}")
+        if extra.get("mcp_server"):
+            lines.append(f"MCP Server: {extra['mcp_server']}")
+        return "\n".join(lines)
+
+    if et == "infra_provisioned":
+        lines = ["Infrastructure Provisioned"]
+        for key in ("vm_name", "ip", "region", "ssh_cmd"):
+            if extra.get(key):
+                lines.append(f"{key}: {extra[key]}")
+        if extra.get("provisioning_time"):
+            lines.append(f"Provisioning Time: {extra['provisioning_time']:.1f}s")
+        return "\n".join(lines)
+
+    if et == "infra_teardown":
+        lines = ["Infrastructure Teardown", f"Benchmark: {event.benchmark}"]
+        if extra.get("vm_name"):
+            lines.append(f"VM: {extra['vm_name']}")
+        return "\n".join(lines)
+
+    if et == "progress":
+        completed = extra.get("completed", 0)
+        total = extra.get("total", 0)
+        lines = [f"Progress: {event.benchmark}", f"Completed: {completed}/{total}"]
+        if extra.get("elapsed_seconds"):
+            mins = extra["elapsed_seconds"] / 60
+            lines.append(f"Elapsed: {mins:.1f} min")
+        if extra.get("estimated_remaining_seconds"):
+            mins = extra["estimated_remaining_seconds"] / 60
+            lines.append(f"ETA: {mins:.1f} min remaining")
+        if extra.get("running_cost") is not None:
+            lines.append(f"Cost so far: ${extra['running_cost']:.2f}")
+        return "\n".join(lines)
+
+    if et == "failure":
+        lines = [f"Evaluation Failed: {event.benchmark}", f"Model: {event.model}"]
+        if extra.get("error"):
+            lines.append(f"Error: {extra['error']}")
+        if extra.get("completed_tasks") is not None:
+            total = extra.get("total_tasks", "?")
+            lines.append(f"Completed: {extra['completed_tasks']}/{total}")
+        if extra.get("last_successful_task"):
+            lines.append(f"Last Successful: {extra['last_successful_task']}")
+        return "\n".join(lines)
+
+    return ""
+
+
+def _lifecycle_slack_color(event: NotificationEvent) -> str:
+    """Return Slack attachment color for lifecycle events."""
+    return {
+        "eval_started": "#439FE0",  # Blue
+        "infra_provisioned": "#439FE0",
+        "infra_teardown": "#808080",  # Grey
+        "progress": "#439FE0",
+        "failure": "danger",
+    }.get(event.event_type, "#808080")
+
+
+def _lifecycle_discord_color(event: NotificationEvent) -> int:
+    """Return Discord embed color for lifecycle events."""
+    return {
+        "eval_started": 0x439FE0,
+        "infra_provisioned": 0x439FE0,
+        "infra_teardown": 0x808080,
+        "progress": 0x439FE0,
+        "failure": 0xFF0000,
+    }.get(event.event_type, 0x808080)
+
+
 def send_slack_notification(webhook_url: str, event: NotificationEvent) -> None:
     """Send notification to Slack via webhook.
 
@@ -81,6 +308,19 @@ def send_slack_notification(webhook_url: str, event: NotificationEvent) -> None:
         webhook_url: Slack webhook URL.
         event: Notification event payload.
     """
+    # Lifecycle events use a separate formatting path
+    if event.event_type in LIFECYCLE_EVENT_TYPES:
+        title = f"mcpbr {event.event_type.replace('_', ' ').title()}: {event.benchmark}"
+        color = _lifecycle_slack_color(event)
+        text = _format_lifecycle_slack_text(event)
+        attachment: dict[str, Any] = {"color": color, "title": title}
+        if text:
+            attachment["text"] = text
+        payload = {"attachments": [attachment]}
+        response = requests.post(webhook_url, json=payload, timeout=10)
+        response.raise_for_status()
+        return
+
     color = "good" if event.resolution_rate >= 0.3 else "warning"
     if event.event_type == "regression" and event.regression_count:
         color = "danger"
@@ -111,7 +351,7 @@ def send_slack_notification(webhook_url: str, event: NotificationEvent) -> None:
             {"title": "Improvements", "value": str(event.improvement_count), "short": True}
         )
 
-    attachment: dict[str, Any] = {"color": color, "title": title, "fields": fields}
+    attachment = {"color": color, "title": title, "fields": fields}
 
     # Add enriched text block when extra data is available
     text = _build_slack_text(event)
@@ -139,6 +379,18 @@ def send_slack_bot_notification(
         channel: Slack channel ID.
         event: Notification event payload.
     """
+    # Lifecycle events use dedicated formatter
+    if event.event_type in LIFECYCLE_EVENT_TYPES:
+        title = f"*mcpbr {event.event_type.replace('_', ' ').title()}: {event.benchmark}*"
+        text = _format_lifecycle_slack_text(event)
+        message_text = f"{title}\n\n{text}" if text else title
+
+        from slack_sdk import WebClient  # pip install mcpbr[slack]
+
+        client = WebClient(token=bot_token)
+        response = client.chat_postMessage(channel=channel, text=message_text)
+        return response.get("ts")
+
     color_emoji = "\u2705" if event.resolution_rate >= 0.3 else "\u26a0\ufe0f"
     if event.event_type == "regression" and event.regression_count:
         color_emoji = "\ud83d\udea8"
@@ -249,6 +501,16 @@ def send_discord_notification(webhook_url: str, event: NotificationEvent) -> Non
         webhook_url: Discord webhook URL.
         event: Notification event payload.
     """
+    # Lifecycle events use a separate formatting path
+    if event.event_type in LIFECYCLE_EVENT_TYPES:
+        title = f"mcpbr {event.event_type.replace('_', ' ').title()}: {event.benchmark}"
+        color = _lifecycle_discord_color(event)
+        description = _format_lifecycle_discord_description(event)
+        payload = {"embeds": [{"title": title, "description": description, "color": color}]}
+        response = requests.post(webhook_url, json=payload, timeout=10)
+        response.raise_for_status()
+        return
+
     color = 0x00FF00 if event.resolution_rate >= 0.3 else 0xFFA500  # Green or Orange
     if event.event_type == "regression" and event.regression_count:
         color = 0xFF0000  # Red
@@ -301,30 +563,37 @@ def send_email_notification(config: dict[str, Any], event: NotificationEvent) ->
                 and optional smtp_user, smtp_password, use_tls.
         event: Notification event payload.
     """
-    subject = (
-        f"mcpbr {event.event_type.title()}: {event.benchmark} \u2014 {event.resolution_rate:.1%}"
-    )
+    # Lifecycle events use a separate formatting path
+    if event.event_type in LIFECYCLE_EVENT_TYPES:
+        label = event.event_type.replace("_", " ").title()
+        subject = f"mcpbr {label}: {event.benchmark}"
+        body = _format_lifecycle_email_body(event)
+    else:
+        subject = (
+            f"mcpbr {event.event_type.title()}: {event.benchmark}"
+            f" \u2014 {event.resolution_rate:.1%}"
+        )
 
-    body_lines = [
-        f"Benchmark: {event.benchmark}",
-        f"Model: {event.model}",
-        f"Resolution Rate: {event.resolution_rate:.1%}",
-        f"Tasks: {event.resolved_tasks}/{event.total_tasks}",
-    ]
+        body_lines = [
+            f"Benchmark: {event.benchmark}",
+            f"Model: {event.model}",
+            f"Resolution Rate: {event.resolution_rate:.1%}",
+            f"Tasks: {event.resolved_tasks}/{event.total_tasks}",
+        ]
 
-    if event.total_cost is not None:
-        body_lines.append(f"Cost: ${event.total_cost:.2f}")
+        if event.total_cost is not None:
+            body_lines.append(f"Cost: ${event.total_cost:.2f}")
 
-    if event.runtime_seconds is not None:
-        mins = event.runtime_seconds / 60
-        body_lines.append(f"Runtime: {mins:.1f} min")
+        if event.runtime_seconds is not None:
+            mins = event.runtime_seconds / 60
+            body_lines.append(f"Runtime: {mins:.1f} min")
 
-    if event.regression_count is not None:
-        body_lines.append(f"Regressions: {event.regression_count}")
-    if event.improvement_count is not None:
-        body_lines.append(f"Improvements: {event.improvement_count}")
+        if event.regression_count is not None:
+            body_lines.append(f"Regressions: {event.regression_count}")
+        if event.improvement_count is not None:
+            body_lines.append(f"Improvements: {event.improvement_count}")
 
-    body = "\n".join(body_lines)
+        body = "\n".join(body_lines)
 
     msg = MIMEText(body)
     msg["Subject"] = subject
@@ -354,8 +623,11 @@ def dispatch_notification(config: dict[str, Any], event: NotificationEvent) -> N
                 slack_bot_token, slack_channel, github_token.
         event: Notification event payload.
     """
+    is_lifecycle = event.event_type in LIFECYCLE_EVENT_TYPES
+
     # Create Gist first so the URL can be included in notifications
-    if config.get("github_token") and event.extra.get("results_json"):
+    # (only for completion/regression events that have results)
+    if not is_lifecycle and config.get("github_token") and event.extra.get("results_json"):
         try:
             gist_url = create_gist_report(
                 github_token=config["github_token"],
@@ -381,8 +653,8 @@ def dispatch_notification(config: dict[str, Any], event: NotificationEvent) -> N
         except Exception as e:
             logger.warning("Failed to send Slack bot notification: %s", e)
 
-        # Post results JSON as a threaded reply
-        if slack_ts and event.extra.get("results_json"):
+        # Post results JSON as a threaded reply (completion events only)
+        if not is_lifecycle and slack_ts and event.extra.get("results_json"):
             try:
                 post_slack_thread_reply(
                     bot_token=config["slack_bot_token"],

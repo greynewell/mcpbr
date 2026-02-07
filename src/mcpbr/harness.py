@@ -1006,6 +1006,99 @@ def _upload_to_cloud_async(
     thread.start()
 
 
+# -- Lifecycle notification helpers (v0.13.0) ---------------------------------
+
+
+def _build_notify_config(config: HarnessConfig) -> dict[str, Any]:
+    """Build notification config dict from HarnessConfig fields.
+
+    Returns an empty dict if no notification channels are configured.
+    """
+    notify_config: dict[str, Any] = {}
+    if hasattr(config, "notify_slack_webhook") and config.notify_slack_webhook:
+        notify_config["slack_webhook"] = config.notify_slack_webhook
+    if hasattr(config, "notify_discord_webhook") and config.notify_discord_webhook:
+        notify_config["discord_webhook"] = config.notify_discord_webhook
+    if hasattr(config, "notify_email") and config.notify_email:
+        notify_config["email"] = config.notify_email
+    if hasattr(config, "slack_bot_token") and config.slack_bot_token:
+        notify_config["slack_bot_token"] = config.slack_bot_token
+    if hasattr(config, "slack_channel") and config.slack_channel:
+        notify_config["slack_channel"] = config.slack_channel
+    if hasattr(config, "github_token") and config.github_token:
+        notify_config["github_token"] = config.github_token
+    return notify_config
+
+
+def _describe_mcp_server(config: HarnessConfig) -> str:
+    """Return a human-readable description of the configured MCP server."""
+    if config.comparison_mode:
+        parts = []
+        for label, srv in [("A", config.mcp_server_a), ("B", config.mcp_server_b)]:
+            if srv:
+                desc = srv.name or "unknown"
+                if srv.command:
+                    cmd = " ".join([srv.command] + (srv.args or []))
+                    desc += f" ({cmd})"
+                parts.append(f"{label}: {desc}")
+        return " vs ".join(parts)
+    if config.mcp_server:
+        srv = config.mcp_server
+        desc = srv.name or "unknown"
+        if srv.command:
+            cmd = " ".join([srv.command] + (srv.args or []))
+            desc += f" ({cmd})"
+        return desc
+    return "unknown"
+
+
+def _dispatch_lifecycle_event(
+    notify_config: dict[str, Any],
+    config: HarnessConfig,
+    event_type: str,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    """Dispatch a lifecycle notification event (never raises)."""
+    try:
+        from .notifications import NotificationEvent, dispatch_notification
+
+        event = NotificationEvent(
+            event_type=event_type,
+            benchmark=config.benchmark,
+            model=config.model,
+            extra=extra or {},
+        )
+        dispatch_notification(notify_config, event)
+    except Exception:
+        pass  # Notifications must never block the evaluation flow
+
+
+class _ProgressTracker:
+    """Track progress notification intervals to avoid spamming."""
+
+    def __init__(self, task_interval: int, time_interval_minutes: int, start_time: float) -> None:
+        self._task_interval = task_interval
+        self._time_interval_seconds = time_interval_minutes * 60
+        self._start_time = start_time
+        self._last_notified_count = 0
+        self._last_notified_time = start_time
+
+    def should_notify(self, completed: int, current_time: float) -> bool:
+        """Return True if a progress notification should be sent now."""
+        if self._task_interval > 0:
+            if completed - self._last_notified_count >= self._task_interval:
+                return True
+        if self._time_interval_seconds > 0:
+            if current_time - self._last_notified_time >= self._time_interval_seconds:
+                return True
+        return False
+
+    def mark_notified(self, completed: int, current_time: float) -> None:
+        """Record that a notification was sent."""
+        self._last_notified_count = completed
+        self._last_notified_time = current_time
+
+
 async def run_evaluation(
     config: HarnessConfig,
     run_mcp: bool = True,
@@ -1241,6 +1334,50 @@ async def run_evaluation(
         sandbox_profile=sandbox_profile,
         audit_logger=audit_logger,
     )
+
+    # Build notification config early for lifecycle events (v0.13.0)
+    notify_config = _build_notify_config(config)
+    eval_start_time = time.time()
+
+    # Dispatch eval_started notification (#413)
+    if notify_config:
+        infra_mode = "local"
+        if hasattr(config, "infrastructure") and hasattr(config.infrastructure, "mode"):
+            infra_mode = config.infrastructure.mode
+        _dispatch_lifecycle_event(
+            notify_config,
+            config,
+            "eval_started",
+            extra={
+                "total_tasks": len(tasks_to_run),
+                "max_concurrent": config.max_concurrent,
+                "infrastructure_mode": infra_mode,
+                "mcp_server": _describe_mcp_server(config),
+            },
+        )
+
+    # Dispatch infra_provisioned for non-local infrastructure (#414)
+    if notify_config and hasattr(config, "infrastructure"):
+        infra = config.infrastructure
+        if infra.mode != "local":
+            _dispatch_lifecycle_event(
+                notify_config,
+                config,
+                "infra_provisioned",
+                extra={
+                    "infrastructure_mode": infra.mode,
+                    "region": getattr(getattr(infra, infra.mode, None), "location", None)
+                    or getattr(getattr(infra, infra.mode, None), "region", None)
+                    or "unknown",
+                },
+            )
+
+    # Progress notification tracker (v0.13.0)
+    progress_tracker: _ProgressTracker | None = None
+    task_interval = getattr(config, "notify_progress_interval", 0)
+    time_interval = getattr(config, "notify_progress_time_minutes", 0)
+    if notify_config and (task_interval > 0 or time_interval > 0):
+        progress_tracker = _ProgressTracker(task_interval, time_interval, eval_start_time)
 
     results: list[TaskResult] = []
     # Add cached results if using state tracker
@@ -1485,6 +1622,27 @@ async def run_evaluation(
                             if files:
                                 _upload_to_cloud_async(cloud_storage, cloud_run_id, files)
 
+                        # Progress notification (#415)
+                        if progress_tracker is not None:
+                            now = time.time()
+                            if progress_tracker.should_notify(len(results), now):
+                                elapsed = now - eval_start_time
+                                avg = elapsed / len(results) if results else 0
+                                remaining = avg * (len(tasks_to_run) - len(results))
+                                _dispatch_lifecycle_event(
+                                    notify_config,
+                                    config,
+                                    "progress",
+                                    extra={
+                                        "completed": len(results),
+                                        "total": len(tasks_to_run),
+                                        "elapsed_seconds": elapsed,
+                                        "estimated_remaining_seconds": remaining,
+                                        "running_cost": current_cost,
+                                    },
+                                )
+                                progress_tracker.mark_notified(len(results), now)
+
                     if budget_exceeded:
                         progress.stop()
                         console.print(
@@ -1556,6 +1714,27 @@ async def run_evaluation(
                             if files:
                                 _upload_to_cloud_async(cloud_storage, cloud_run_id, files)
 
+                        # Progress notification (#415)
+                        if progress_tracker is not None:
+                            now = time.time()
+                            if progress_tracker.should_notify(len(results), now):
+                                elapsed = now - eval_start_time
+                                avg = elapsed / len(results) if results else 0
+                                remaining = avg * (len(tasks_to_run) - len(results))
+                                _dispatch_lifecycle_event(
+                                    notify_config,
+                                    config,
+                                    "progress",
+                                    extra={
+                                        "completed": len(results),
+                                        "total": len(tasks_to_run),
+                                        "elapsed_seconds": elapsed,
+                                        "estimated_remaining_seconds": remaining,
+                                        "running_cost": current_cost,
+                                    },
+                                )
+                                progress_tracker.mark_notified(len(results), now)
+
                     if budget_exceeded:
                         progress.stop()
                         console.print(
@@ -1573,7 +1752,28 @@ async def run_evaluation(
                 # Explicitly stop before exiting context to avoid
                 # deadlock between Rich's rendering thread and asyncio
                 progress.stop()
+    except Exception as exc:
+        # Dispatch failure notification (#416)
+        if notify_config:
+            last_task = results[-1].instance_id if results else None
+            _dispatch_lifecycle_event(
+                notify_config,
+                config,
+                "failure",
+                extra={
+                    "error": str(exc),
+                    "completed_tasks": len(results),
+                    "total_tasks": len(tasks_to_run),
+                    "last_successful_task": last_task,
+                },
+            )
+        raise
     finally:
+        # Dispatch infra_teardown notification (#414)
+        if notify_config and hasattr(config, "infrastructure"):
+            infra = config.infrastructure
+            if infra.mode != "local":
+                _dispatch_lifecycle_event(notify_config, config, "infra_teardown", extra={})
         await docker_manager.cleanup_all()
         # Force-shutdown the default executor to prevent asyncio.run() from
         # hanging during cleanup. Docker SDK background threads (urllib3
@@ -1774,19 +1974,6 @@ async def run_evaluation(
 
         from .notifications import NotificationEvent, dispatch_notification
 
-        notify_config = {}
-        if hasattr(config, "notify_slack_webhook") and config.notify_slack_webhook:
-            notify_config["slack_webhook"] = config.notify_slack_webhook
-        if hasattr(config, "notify_discord_webhook") and config.notify_discord_webhook:
-            notify_config["discord_webhook"] = config.notify_discord_webhook
-        if hasattr(config, "notify_email") and config.notify_email:
-            notify_config["email"] = config.notify_email
-        if hasattr(config, "slack_bot_token") and config.slack_bot_token:
-            notify_config["slack_bot_token"] = config.slack_bot_token
-        if hasattr(config, "slack_channel") and config.slack_channel:
-            notify_config["slack_channel"] = config.slack_channel
-        if hasattr(config, "github_token") and config.github_token:
-            notify_config["github_token"] = config.github_token
         if notify_config:
             total = len(results)
             resolved = sum(1 for t in results if t.mcp and t.mcp.get("resolved"))
@@ -1803,13 +1990,7 @@ async def run_evaluation(
             extra: dict[str, Any] = {"task_results": task_results}
 
             # Include MCP server identity
-            if hasattr(config, "mcp_server") and config.mcp_server:
-                srv = config.mcp_server
-                server_desc = srv.name or "unknown"
-                if srv.command:
-                    cmd_parts = [srv.command] + (srv.args or [])
-                    server_desc += f" ({' '.join(cmd_parts)})"
-                extra["mcp_server"] = server_desc
+            extra["mcp_server"] = _describe_mcp_server(config)
 
             # Include tool stats if available
             if mcp_tool_stats:

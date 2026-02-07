@@ -825,6 +825,16 @@ class HarnessConfig(BaseModel):
         default=None, description="GitHub token for creating Gist reports."
     )
 
+    # --- Lifecycle Notifications (v0.13.0) ---
+    notify_progress_interval: int = Field(
+        default=0,
+        description="Send progress notification every N completed tasks (0 = disabled).",
+    )
+    notify_progress_time_minutes: int = Field(
+        default=0,
+        description="Send progress notification every N minutes (0 = disabled).",
+    )
+
     @model_validator(mode="after")
     def validate_stratified_sampling(self) -> "HarnessConfig":
         """Ensure stratify_field is set when using stratified sampling."""

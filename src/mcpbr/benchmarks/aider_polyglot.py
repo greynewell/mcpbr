@@ -219,3 +219,6 @@ class AiderPolyglotBenchmark:
             "- Follow the language's idiomatic patterns\n"
             "- Do not modify the test files"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

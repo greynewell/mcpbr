@@ -227,3 +227,6 @@ class TruthfulQABenchmark:
             "- If uncertain, say so rather than guessing\n"
             "- Base your answer on verified facts"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

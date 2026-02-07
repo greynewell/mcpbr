@@ -76,7 +76,7 @@ class TestAuditAction:
 
     def test_all_enum_members_count(self) -> None:
         """Test that the enum has the expected number of members."""
-        assert len(AuditAction) == 13
+        assert len(AuditAction) == 17
 
 
 class TestAuditEvent:

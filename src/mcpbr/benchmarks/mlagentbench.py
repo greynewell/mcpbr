@@ -252,3 +252,6 @@ class MLAgentBenchBenchmark:
             "- Improve upon the baseline performance\n"
             "- Save your implementation and results"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

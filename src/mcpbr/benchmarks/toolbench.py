@@ -271,3 +271,6 @@ class ToolBenchBenchmark:
             "- Output your tool calls as a JSON array\n"
             "- Each tool call should have 'name' and 'parameters' fields"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

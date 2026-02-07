@@ -259,3 +259,6 @@ class MATHBenchmark:
             "- Provide your final answer in \\boxed{answer} format\n"
             "- You may use Python/SymPy for verification"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

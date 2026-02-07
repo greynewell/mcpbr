@@ -217,3 +217,6 @@ class MBPPBenchmark:
             "- Save your implementation to a file named 'solution.py'\n"
             "- Include ONLY the function implementation in the file"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

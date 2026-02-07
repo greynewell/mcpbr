@@ -520,6 +520,9 @@ class CustomBenchmark:
             "Provide your answer clearly."
         )
 
+    def get_default_sandbox_level(self) -> str | None:
+        return None
+
     @staticmethod
     def _normalize_text(text: str) -> str:
         """Normalize text for comparison by lowercasing, stripping, collapsing whitespace.

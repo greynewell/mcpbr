@@ -32,6 +32,10 @@ class AuditAction(Enum):
     RESULT_EXPORTED = "result_exported"
     DATA_ACCESSED = "data_accessed"
     DATA_DELETED = "data_deleted"
+    SANDBOX_APPLIED = "sandbox_applied"
+    SANDBOX_VALIDATED = "sandbox_validated"
+    SECURITY_SCAN_FINDING = "security_scan_finding"
+    SECURITY_SCAN_BLOCKED = "security_scan_blocked"
 
 
 @dataclass

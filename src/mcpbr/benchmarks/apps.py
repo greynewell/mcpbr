@@ -241,3 +241,6 @@ class APPSBenchmark:
             "- Save your solution to a file named 'solution.py'\n"
             "- Ensure your solution is efficient enough for the given constraints"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

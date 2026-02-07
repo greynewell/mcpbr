@@ -330,6 +330,14 @@ class AdversarialBenchmark:
         """
         return None
 
+    def get_default_sandbox_level(self) -> str | None:
+        """Return strict sandbox for adversarial benchmarks (safety-sensitive).
+
+        Returns:
+            "strict" security level.
+        """
+        return "strict"
+
     def get_prompt_template(self) -> str:
         """Get adversarial benchmark prompt template.
 

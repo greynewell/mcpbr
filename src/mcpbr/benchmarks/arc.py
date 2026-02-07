@@ -220,3 +220,6 @@ class ARCBenchmark:
             "- Consider each answer option carefully\n"
             "- Respond with ONLY the letter of the correct answer (A, B, C, D, or E)"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

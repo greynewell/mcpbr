@@ -207,3 +207,6 @@ class RepoQABenchmark:
             "- Provide the exact function name\n"
             "- Explain what the function does"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

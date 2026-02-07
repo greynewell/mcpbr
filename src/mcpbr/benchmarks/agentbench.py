@@ -202,3 +202,6 @@ class AgentBenchBenchmark:
             "- Use available tools and commands\n"
             "- Provide your final answer or result clearly"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

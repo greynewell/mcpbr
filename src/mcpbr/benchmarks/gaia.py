@@ -216,3 +216,6 @@ class GAIABenchmark:
             "- Show your reasoning but be concise in your final answer\n"
             "- The answer should be unambiguous"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

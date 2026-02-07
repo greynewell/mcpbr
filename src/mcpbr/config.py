@@ -675,6 +675,14 @@ class HarnessConfig(BaseModel):
         "Custom overrides: cap_drop, cap_add, read_only_rootfs, network_disabled, tmpfs_mounts.",
     )
 
+    prompt_security: dict | None = Field(
+        default=None,
+        description="Prompt security scanning configuration. "
+        "Use {'enabled': true} for default scanning. "
+        "Options: scan_level (full/minimal), action (audit/warn/block), "
+        "custom_patterns, allowlist_patterns.",
+    )
+
     infrastructure: InfrastructureConfig = Field(
         default_factory=InfrastructureConfig,
         description="Infrastructure configuration (local or azure)",

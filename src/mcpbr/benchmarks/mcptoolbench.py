@@ -450,3 +450,6 @@ class MCPToolBenchmark:
             "- If multiple tools are needed, call them in the correct sequence\n"
             "- Focus on completing the task efficiently and accurately"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

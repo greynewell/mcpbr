@@ -383,3 +383,6 @@ class GSM8KBenchmark:
             "- Use the format 'The answer is: <number>' for your final answer\n"
             "- You can use Python for calculations if needed"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

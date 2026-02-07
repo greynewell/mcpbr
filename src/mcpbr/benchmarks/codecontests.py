@@ -263,3 +263,6 @@ class CodeContestsBenchmark:
             "- Handle all edge cases\n"
             "- Save your solution to a file named 'solution.py'"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

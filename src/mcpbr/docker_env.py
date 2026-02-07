@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from .audit import AuditLogger
     from .sandbox import SandboxProfile
 
 from docker.models.containers import Container
@@ -326,6 +327,7 @@ class DockerEnvironmentManager:
         use_prebuilt: bool = True,
         extra_volumes: dict[str, str] | None = None,
         sandbox_profile: "SandboxProfile | None" = None,
+        audit_logger: "AuditLogger | None" = None,
     ) -> None:
         """Initialize the Docker environment manager.
 
@@ -333,11 +335,13 @@ class DockerEnvironmentManager:
             use_prebuilt: If True, try to use pre-built SWE-bench images first.
             extra_volumes: Additional volume mounts (read-write) (host_path -> container_path).
             sandbox_profile: Security sandbox profile for containers. None uses defaults.
+            audit_logger: Optional audit logger for sandbox security events.
         """
         self.client = docker.from_env()
         self.use_prebuilt = use_prebuilt
         self._extra_volumes = extra_volumes or {}
         self._sandbox_profile = sandbox_profile
+        self._audit_logger = audit_logger
         self._fallback_image_built = False
         self._temp_dirs: list[tempfile.TemporaryDirectory[str]] = []
         self._containers: list[Container] = []
@@ -578,6 +582,41 @@ CMD ["/bin/bash"]
         loop = asyncio.get_event_loop()
         container = await loop.run_in_executor(None, _create_container)
         self._containers.append(container)
+
+        # Audit: log sandbox applied and validate
+        if self._sandbox_profile and self._audit_logger:
+            from .audit import AuditAction
+
+            self._audit_logger.log(
+                action=AuditAction.SANDBOX_APPLIED,
+                resource=container_name,
+                details={
+                    "profile_name": self._sandbox_profile.name,
+                    "security_level": self._sandbox_profile.security_level.value,
+                    "cap_drop": self._sandbox_profile.cap_drop,
+                    "read_only_rootfs": self._sandbox_profile.read_only_rootfs,
+                    "network_disabled": self._sandbox_profile.network_disabled,
+                },
+            )
+
+            # Validate sandbox settings match profile
+            from .sandbox import validate_sandbox
+
+            try:
+                container.reload()
+                host_config = container.attrs.get("HostConfig", {})
+                valid, mismatches = validate_sandbox(host_config, self._sandbox_profile)
+                self._audit_logger.log(
+                    action=AuditAction.SANDBOX_VALIDATED,
+                    resource=container_name,
+                    result="success" if valid else "warning",
+                    details={
+                        "valid": valid,
+                        "mismatches": mismatches,
+                    },
+                )
+            except Exception as e:
+                logger.warning("Sandbox validation failed: %s", e)
 
         env = TaskEnvironment(
             container=container,

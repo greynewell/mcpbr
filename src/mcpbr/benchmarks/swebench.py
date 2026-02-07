@@ -199,3 +199,6 @@ class SWEBenchmark:
             "- Do NOT create reproduction scripts\n"
             "- Focus solely on the fix in existing source files"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

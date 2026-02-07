@@ -262,3 +262,6 @@ class InterCodeBenchmark:
             "- Debug any errors you encounter\n"
             "- Save your final output to 'output.txt'"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

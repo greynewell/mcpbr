@@ -245,3 +245,6 @@ class BigBenchHardBenchmark:
             "- Show your reasoning process\n"
             "- Provide a clear, definitive final answer"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

@@ -484,6 +484,14 @@ class CyberGymBenchmark:
         """
         return None
 
+    def get_default_sandbox_level(self) -> str | None:
+        """Return strict sandbox for CyberGym (runs untrusted exploit code).
+
+        Returns:
+            "strict" security level.
+        """
+        return "strict"
+
     def get_prompt_template(self) -> str:
         """Get CyberGym prompt template.
 

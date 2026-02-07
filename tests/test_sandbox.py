@@ -13,6 +13,7 @@ from mcpbr.sandbox import (
     SecurityLevel,
     create_profile,
     parse_sandbox_config,
+    validate_sandbox,
 )
 
 
@@ -257,3 +258,160 @@ class TestConstants:
         """Dangerous and minimal capabilities should not overlap."""
         overlap = set(DANGEROUS_CAPABILITIES) & set(MINIMAL_CAPABILITIES)
         assert len(overlap) == 0, f"Overlapping capabilities: {overlap}"
+
+
+class TestNewSandboxFields:
+    """Tests for v0.12.0 sandbox enhancements."""
+
+    def test_userns_mode_default_none(self) -> None:
+        profile = SandboxProfile()
+        assert profile.userns_mode is None
+
+    def test_userns_mode_in_strict_profile(self) -> None:
+        profile = create_profile("strict")
+        assert profile.userns_mode == "host"
+
+    def test_userns_mode_in_docker_kwargs(self) -> None:
+        profile = SandboxProfile(userns_mode="host", no_new_privileges=False)
+        kwargs = profile.to_docker_kwargs()
+        assert kwargs["userns_mode"] == "host"
+
+    def test_userns_mode_not_in_kwargs_when_none(self) -> None:
+        profile = SandboxProfile(no_new_privileges=False)
+        kwargs = profile.to_docker_kwargs()
+        assert "userns_mode" not in kwargs
+
+    def test_device_read_bps_default_none(self) -> None:
+        profile = SandboxProfile()
+        assert profile.device_read_bps is None
+
+    def test_device_write_bps_default_none(self) -> None:
+        profile = SandboxProfile()
+        assert profile.device_write_bps is None
+
+    def test_device_read_bps_in_docker_kwargs(self) -> None:
+        profile = SandboxProfile(device_read_bps=10_000_000, no_new_privileges=False)
+        kwargs = profile.to_docker_kwargs()
+        assert "device_read_bps" in kwargs
+        assert kwargs["device_read_bps"][0]["Rate"] == 10_000_000
+
+    def test_device_write_bps_in_docker_kwargs(self) -> None:
+        profile = SandboxProfile(device_write_bps=5_000_000, no_new_privileges=False)
+        kwargs = profile.to_docker_kwargs()
+        assert "device_write_bps" in kwargs
+        assert kwargs["device_write_bps"][0]["Rate"] == 5_000_000
+
+    def test_io_limits_not_in_kwargs_when_none(self) -> None:
+        profile = SandboxProfile(no_new_privileges=False)
+        kwargs = profile.to_docker_kwargs()
+        assert "device_read_bps" not in kwargs
+        assert "device_write_bps" not in kwargs
+
+    def test_network_allowlist_default_empty(self) -> None:
+        profile = SandboxProfile()
+        assert profile.network_allowlist == []
+
+    def test_network_allowlist_values(self) -> None:
+        profile = SandboxProfile(network_allowlist=["api.example.com", "cdn.example.com"])
+        assert len(profile.network_allowlist) == 2
+        assert "api.example.com" in profile.network_allowlist
+
+    def test_parse_userns_mode(self) -> None:
+        config = {"level": "standard", "userns_mode": "host"}
+        profile = parse_sandbox_config(config)
+        assert profile.userns_mode == "host"
+
+    def test_parse_io_limits(self) -> None:
+        config = {
+            "level": "standard",
+            "device_read_bps": 20_000_000,
+            "device_write_bps": 10_000_000,
+        }
+        profile = parse_sandbox_config(config)
+        assert profile.device_read_bps == 20_000_000
+        assert profile.device_write_bps == 10_000_000
+
+    def test_parse_network_allowlist(self) -> None:
+        config = {
+            "level": "standard",
+            "network_allowlist": ["api.example.com"],
+        }
+        profile = parse_sandbox_config(config)
+        assert profile.network_allowlist == ["api.example.com"]
+
+
+class TestValidateSandbox:
+    """Tests for validate_sandbox function."""
+
+    def test_valid_profile_passes(self) -> None:
+        profile = SandboxProfile(
+            cap_drop=["SYS_ADMIN"],
+            cap_add=["CHOWN"],
+            no_new_privileges=True,
+            read_only_rootfs=True,
+            network_disabled=True,
+            userns_mode="host",
+        )
+        container_attrs = {
+            "CapDrop": ["SYS_ADMIN"],
+            "CapAdd": ["CHOWN"],
+            "ReadonlyRootfs": True,
+            "NetworkMode": "none",
+            "SecurityOpt": ["no-new-privileges:true"],
+            "UsernsMode": "host",
+        }
+        valid, mismatches = validate_sandbox(container_attrs, profile)
+        assert valid is True
+        assert mismatches == []
+
+    def test_cap_drop_mismatch(self) -> None:
+        profile = SandboxProfile(cap_drop=["SYS_ADMIN", "NET_ADMIN"], no_new_privileges=False)
+        container_attrs = {"CapDrop": ["SYS_ADMIN"]}
+        valid, mismatches = validate_sandbox(container_attrs, profile)
+        assert valid is False
+        assert any("cap_drop" in m for m in mismatches)
+
+    def test_cap_add_mismatch(self) -> None:
+        profile = SandboxProfile(cap_add=["CHOWN", "SETUID"], no_new_privileges=False)
+        container_attrs = {"CapAdd": ["CHOWN"]}
+        valid, mismatches = validate_sandbox(container_attrs, profile)
+        assert valid is False
+        assert any("cap_add" in m for m in mismatches)
+
+    def test_read_only_mismatch(self) -> None:
+        profile = SandboxProfile(read_only_rootfs=True, no_new_privileges=False)
+        container_attrs = {"ReadonlyRootfs": False}
+        valid, mismatches = validate_sandbox(container_attrs, profile)
+        assert valid is False
+        assert any("read_only_rootfs" in m for m in mismatches)
+
+    def test_network_mode_mismatch(self) -> None:
+        profile = SandboxProfile(network_disabled=True, no_new_privileges=False)
+        container_attrs = {"NetworkMode": "bridge"}
+        valid, mismatches = validate_sandbox(container_attrs, profile)
+        assert valid is False
+        assert any("network_mode" in m for m in mismatches)
+
+    def test_no_new_privileges_mismatch(self) -> None:
+        profile = SandboxProfile(no_new_privileges=True)
+        container_attrs = {"SecurityOpt": []}
+        valid, mismatches = validate_sandbox(container_attrs, profile)
+        assert valid is False
+        assert any("no_new_privileges" in m for m in mismatches)
+
+    def test_userns_mode_mismatch(self) -> None:
+        profile = SandboxProfile(userns_mode="host", no_new_privileges=False)
+        container_attrs = {"UsernsMode": ""}
+        valid, mismatches = validate_sandbox(container_attrs, profile)
+        assert valid is False
+        assert any("userns_mode" in m for m in mismatches)
+
+    def test_empty_profile_passes(self) -> None:
+        """A profile with no restrictions should pass with any container."""
+        profile = SandboxProfile(
+            cap_drop=[], cap_add=[], no_new_privileges=False, network_disabled=False
+        )
+        container_attrs = {}
+        valid, mismatches = validate_sandbox(container_attrs, profile)
+        assert valid is True
+        assert mismatches == []

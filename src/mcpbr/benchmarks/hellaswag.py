@@ -215,3 +215,6 @@ class HellaSwagBenchmark:
             "- Consider what would most likely happen next\n"
             "- Respond with ONLY the option number (0, 1, 2, or 3)"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

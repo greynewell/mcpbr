@@ -114,3 +114,16 @@ class Benchmark(Protocol):
             Prompt template string with {problem_statement} placeholder.
         """
         ...
+
+    def get_default_sandbox_level(self) -> str | None:
+        """Get the default sandbox security level for this benchmark.
+
+        Benchmarks that run untrusted or adversarial code should return
+        a stricter level. The user's explicit sandbox config always
+        takes precedence over this default.
+
+        Returns:
+            Security level string ("permissive", "standard", "strict")
+            or None to use the global default.
+        """
+        ...

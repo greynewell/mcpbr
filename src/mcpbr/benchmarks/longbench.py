@@ -621,3 +621,6 @@ class LongBenchBenchmark:
             "- For summarization tasks, capture the key points concisely\n"
             "- For code tasks, complete the code following the existing patterns"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

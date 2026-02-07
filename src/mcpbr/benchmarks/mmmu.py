@@ -357,3 +357,6 @@ class MMMUBenchmark:
             "- Show your reasoning step-by-step\n"
             "- Respond with ONLY the letter of the correct answer (A, B, C, or D)"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

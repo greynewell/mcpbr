@@ -155,6 +155,10 @@ class SandboxProfile:
         no_new_privileges: Prevent privilege escalation.
         resource_limits: Resource limits for the container.
         network_disabled: Completely disable networking.
+        userns_mode: Docker user namespace remapping mode (e.g., "host").
+        device_read_bps: I/O rate limit for device reads in bytes per second.
+        device_write_bps: I/O rate limit for device writes in bytes per second.
+        network_allowlist: Allowed hosts when using allowlist network mode.
     """
 
     name: str = "standard"
@@ -167,6 +171,10 @@ class SandboxProfile:
     no_new_privileges: bool = True
     resource_limits: ResourceLimits | None = None
     network_disabled: bool = False
+    userns_mode: str | None = None
+    device_read_bps: int | None = None
+    device_write_bps: int | None = None
+    network_allowlist: list[str] = field(default_factory=list)
 
     def to_docker_kwargs(self) -> dict[str, Any]:
         """Convert sandbox profile to Docker container creation kwargs.
@@ -203,6 +211,16 @@ class SandboxProfile:
         # Network isolation
         if self.network_disabled:
             kwargs["network_mode"] = "none"
+
+        # User namespace remapping
+        if self.userns_mode:
+            kwargs["userns_mode"] = self.userns_mode
+
+        # I/O rate limits (applied to all block devices)
+        if self.device_read_bps is not None:
+            kwargs["device_read_bps"] = [{"Path": "/dev/sda", "Rate": self.device_read_bps}]
+        if self.device_write_bps is not None:
+            kwargs["device_write_bps"] = [{"Path": "/dev/sda", "Rate": self.device_write_bps}]
 
         # Resource limits
         if self.resource_limits:
@@ -292,6 +310,7 @@ def create_profile(level: SecurityLevel | str) -> SandboxProfile:
                 network_mode="none",
             ),
             network_disabled=True,
+            userns_mode="host",
         )
 
     # Should not reach here due to enum exhaustiveness
@@ -338,5 +357,76 @@ def parse_sandbox_config(config_dict: dict[str, Any]) -> SandboxProfile:
         profile.network_disabled = config_dict["network_disabled"]
     if "tmpfs_mounts" in config_dict:
         profile.tmpfs_mounts = config_dict["tmpfs_mounts"]
+    if "userns_mode" in config_dict:
+        profile.userns_mode = config_dict["userns_mode"]
+    if "device_read_bps" in config_dict:
+        profile.device_read_bps = config_dict["device_read_bps"]
+    if "device_write_bps" in config_dict:
+        profile.device_write_bps = config_dict["device_write_bps"]
+    if "network_allowlist" in config_dict:
+        profile.network_allowlist = config_dict["network_allowlist"]
 
     return profile
+
+
+def validate_sandbox(
+    container_attrs: dict[str, Any], profile: SandboxProfile
+) -> tuple[bool, list[str]]:
+    """Validate that a container's host config matches the expected sandbox profile.
+
+    Inspects container attributes (from ``container.attrs["HostConfig"]``) and
+    verifies that capability, filesystem, and network settings match the profile.
+    This is advisory only — mismatches are logged as warnings but do not abort.
+
+    Args:
+        container_attrs: The ``HostConfig`` dictionary from ``container.attrs``.
+        profile: The expected SandboxProfile.
+
+    Returns:
+        Tuple of ``(valid, mismatches)`` where *valid* is True if all checked
+        settings match, and *mismatches* is a list of human-readable descriptions
+        for any differences found.
+    """
+    mismatches: list[str] = []
+
+    # Check cap_drop
+    actual_cap_drop = container_attrs.get("CapDrop") or []
+    if profile.cap_drop and sorted(actual_cap_drop) != sorted(profile.cap_drop):
+        mismatches.append(f"cap_drop mismatch: expected {profile.cap_drop}, got {actual_cap_drop}")
+
+    # Check cap_add
+    actual_cap_add = container_attrs.get("CapAdd") or []
+    if profile.cap_add and sorted(actual_cap_add) != sorted(profile.cap_add):
+        mismatches.append(f"cap_add mismatch: expected {profile.cap_add}, got {actual_cap_add}")
+
+    # Check read-only rootfs
+    actual_read_only = container_attrs.get("ReadonlyRootfs", False)
+    if profile.read_only_rootfs and not actual_read_only:
+        mismatches.append("read_only_rootfs expected True but container has False")
+
+    # Check network mode
+    actual_network_mode = container_attrs.get("NetworkMode", "")
+    if profile.network_disabled and actual_network_mode != "none":
+        mismatches.append(f"network_mode mismatch: expected 'none', got '{actual_network_mode}'")
+
+    # Check security_opt for no-new-privileges
+    actual_security_opt = container_attrs.get("SecurityOpt") or []
+    if profile.no_new_privileges:
+        if "no-new-privileges:true" not in actual_security_opt:
+            # Docker may also store it as "no-new-privileges"
+            if "no-new-privileges" not in actual_security_opt:
+                mismatches.append("no_new_privileges expected but not found in SecurityOpt")
+
+    # Check userns_mode
+    actual_userns = container_attrs.get("UsernsMode", "")
+    if profile.userns_mode and actual_userns != profile.userns_mode:
+        mismatches.append(
+            f"userns_mode mismatch: expected '{profile.userns_mode}', got '{actual_userns}'"
+        )
+
+    valid = len(mismatches) == 0
+    if not valid:
+        for mismatch in mismatches:
+            logger.warning("Sandbox validation: %s", mismatch)
+
+    return valid, mismatches

@@ -252,3 +252,6 @@ class CoderEvalBenchmark:
             "- Ensure compatibility with project-specific types\n"
             "- Save your implementation to 'solution.py'"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

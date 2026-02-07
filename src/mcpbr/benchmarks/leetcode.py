@@ -238,3 +238,6 @@ class LeetCodeBenchmark:
             "- Handle edge cases correctly\n"
             "- Save your solution to 'solution.py'"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

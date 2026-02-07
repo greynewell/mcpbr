@@ -219,3 +219,6 @@ class WebArenaBenchmark:
             "- Provide any requested information in your response\n"
             "- Be precise with your final answer"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

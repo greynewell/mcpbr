@@ -222,3 +222,6 @@ class TerminalBenchBenchmark:
             "- Ensure your changes persist in the terminal environment\n"
             "- You have full access to standard Unix tools"
         )
+
+    def get_default_sandbox_level(self) -> str | None:
+        return None

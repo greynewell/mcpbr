@@ -1160,15 +1160,44 @@ async def run_evaluation(
 
     # Initialize sandbox profile if configured
     sandbox_profile = None
-    if config.sandbox:
+    sandbox_config = config.sandbox
+
+    # Per-benchmark sandbox defaults: if user didn't configure sandbox,
+    # check if the benchmark provides a default level
+    if sandbox_config is None and hasattr(benchmark, "get_default_sandbox_level"):
+        default_level = benchmark.get_default_sandbox_level()
+        if default_level:
+            sandbox_config = {"level": default_level}
+
+    if sandbox_config:
         from .sandbox import parse_sandbox_config
 
-        sandbox_profile = parse_sandbox_config(config.sandbox)
+        sandbox_profile = parse_sandbox_config(sandbox_config)
+
+    # Initialize audit logger for sandbox events
+    audit_logger = None
+    if config.audit_enabled:
+        from .audit import AuditConfig, AuditLogger
+
+        audit_config = AuditConfig(
+            enabled=True,
+            log_file=config.audit_log_file,
+        )
+        audit_logger = AuditLogger(audit_config)
+
+    # Initialize prompt security scanner if configured
+    prompt_scanner = None
+    if config.prompt_security and config.prompt_security.get("enabled", False):
+        from .prompt_security import PromptSecurityScanner, parse_prompt_security_config
+
+        security_config = parse_prompt_security_config(config.prompt_security)
+        prompt_scanner = PromptSecurityScanner(security_config)
 
     docker_manager = DockerEnvironmentManager(
         use_prebuilt=config.use_prebuilt_images,
         extra_volumes=config.volumes,
         sandbox_profile=sandbox_profile,
+        audit_logger=audit_logger,
     )
 
     results: list[TaskResult] = []
@@ -1187,6 +1216,65 @@ async def run_evaluation(
         if config.budget and current_cost >= config.budget:
             budget_exceeded = True
             return None
+
+        # Prompt security scanning
+        if prompt_scanner is not None:
+            scan_result = prompt_scanner.scan_task(task)
+            instance_id = task.get("instance_id", "unknown")
+            if scan_result.has_findings:
+                for finding in scan_result.findings:
+                    logger.warning(
+                        "Security finding in task %s [%s]: %s (%s in %s)",
+                        instance_id,
+                        finding.severity.value,
+                        finding.description,
+                        finding.pattern_name,
+                        finding.location,
+                    )
+                # Log to audit if available
+                if audit_logger is not None:
+                    from .audit import AuditAction
+
+                    audit_logger.log(
+                        action=AuditAction.SECURITY_SCAN_FINDING,
+                        resource=instance_id,
+                        details={
+                            "findings_count": len(scan_result.findings),
+                            "max_severity": scan_result.max_severity.value
+                            if scan_result.max_severity
+                            else None,
+                            "action": scan_result.action_taken.value,
+                        },
+                    )
+                if scan_result.blocked:
+                    logger.warning("Task %s blocked by prompt security scanner", instance_id)
+                    if audit_logger is not None:
+                        from .audit import AuditAction
+
+                        audit_logger.log(
+                            action=AuditAction.SECURITY_SCAN_BLOCKED,
+                            resource=instance_id,
+                            details={
+                                "findings_count": len(scan_result.findings),
+                                "max_severity": scan_result.max_severity.value
+                                if scan_result.max_severity
+                                else None,
+                            },
+                        )
+                    cost = calculate_cost(config.model, 0, 0)
+                    blocked_result = TaskResult(instance_id=instance_id)
+                    blocked_result.mcp = {
+                        "resolved": False,
+                        "patch_applied": False,
+                        "error": f"Blocked by prompt security scanner: "
+                        f"{len(scan_result.findings)} finding(s)",
+                        "tokens": {"input": 0, "output": 0},
+                        "iterations": 0,
+                        "tool_calls": 0,
+                        "cost": cost if cost is not None else 0.0,
+                        "security_blocked": True,
+                    }
+                    return blocked_result
 
         async with semaphore:
             # Stagger first-batch launches to avoid cold-start contention (#401).

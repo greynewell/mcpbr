@@ -12,6 +12,7 @@ on any static file server or GitHub repository.
 import json
 import logging
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
@@ -20,6 +21,9 @@ logger = logging.getLogger(__name__)
 
 # Default registry URL (can be overridden via config)
 DEFAULT_REGISTRY_URL = "https://raw.githubusercontent.com/greynewell/mcpbr/main/registry.json"
+
+# Maximum response size (10 MB) to prevent OOM from malicious servers
+MAX_RESPONSE_SIZE = 10 * 1024 * 1024
 
 
 @dataclass
@@ -133,7 +137,19 @@ class RegistryClient:
         Args:
             registry_url: URL of the registry JSON file.
             timeout: HTTP request timeout in seconds.
+
+        Raises:
+            ValueError: If registry_url uses a non-HTTPS scheme (SSRF prevention).
         """
+        parsed = urllib.parse.urlparse(registry_url)
+        if parsed.scheme != "https":
+            # Allow http:// only for localhost/127.0.0.1 (local development)
+            is_local = parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1")
+            if not is_local:
+                raise ValueError(
+                    f"Registry URL must use https:// (got {parsed.scheme}://). "
+                    "Only http://localhost and http://127.0.0.1 are allowed for development."
+                )
         self.registry_url = registry_url
         self.timeout = timeout
         self._cache: Registry | None = None
@@ -153,7 +169,7 @@ class RegistryClient:
                 headers={"Accept": "application/json", "User-Agent": "mcpbr"},
             )
             response = urllib.request.urlopen(req, timeout=self.timeout)
-            data = json.loads(response.read().decode("utf-8"))
+            data = json.loads(response.read(MAX_RESPONSE_SIZE).decode("utf-8"))
             self._cache = Registry.from_dict(data)
             return self._cache
         except urllib.error.URLError as e:

@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from mcpbr.plugin_registry import (
+    DEFAULT_REGISTRY_URL,
+    MAX_RESPONSE_SIZE,
     PluginEntry,
     Registry,
     RegistryClient,
@@ -214,6 +216,50 @@ class TestRegistryClient:
         client = RegistryClient()
         plugins = client.list_all()
         assert len(plugins) == 2
+
+    def test_rejects_file_url(self) -> None:
+        """Test that file:// URLs are rejected to prevent SSRF."""
+        with pytest.raises(ValueError, match="must use https://"):
+            RegistryClient(registry_url="file:///etc/passwd")
+
+    def test_rejects_http_url(self) -> None:
+        """Test that plain http:// URLs are rejected (must be https)."""
+        with pytest.raises(ValueError, match="must use https://"):
+            RegistryClient(registry_url="http://169.254.169.254/latest/meta-data/")
+
+    def test_allows_http_localhost(self) -> None:
+        """Test that http://localhost is allowed for local development."""
+        client = RegistryClient(registry_url="http://localhost:8080/registry.json")
+        assert client.registry_url == "http://localhost:8080/registry.json"
+
+    def test_allows_http_127_0_0_1(self) -> None:
+        """Test that http://127.0.0.1 is allowed for local development."""
+        client = RegistryClient(registry_url="http://127.0.0.1:8080/registry.json")
+        assert client.registry_url == "http://127.0.0.1:8080/registry.json"
+
+    def test_allows_https_url(self) -> None:
+        """Test that https:// URLs are accepted."""
+        client = RegistryClient(registry_url="https://example.com/registry.json")
+        assert client.registry_url == "https://example.com/registry.json"
+
+    def test_default_url_is_https(self) -> None:
+        """Test that the default registry URL uses https."""
+        assert DEFAULT_REGISTRY_URL.startswith("https://")
+
+    @patch("mcpbr.plugin_registry.urllib.request.urlopen")
+    def test_response_size_limit(self, mock_urlopen: MagicMock) -> None:
+        """Test that response reading uses a size limit."""
+        mock_response = MagicMock()
+        mock_response.read.return_value = b'{"version": "1", "plugins": []}'
+        mock_urlopen.return_value = mock_response
+
+        client = RegistryClient()
+        client.fetch()
+        mock_response.read.assert_called_once_with(MAX_RESPONSE_SIZE)
+
+    def test_max_response_size_is_10mb(self) -> None:
+        """Test that MAX_RESPONSE_SIZE is 10MB."""
+        assert MAX_RESPONSE_SIZE == 10 * 1024 * 1024
 
 
 class TestGenerateRegistryEntry:

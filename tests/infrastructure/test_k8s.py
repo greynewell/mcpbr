@@ -555,3 +555,66 @@ class TestExtractJsonResults:
         )
         result = KubernetesProvider._extract_json_results(log_output)
         assert result is not None
+
+
+# ============================================================================
+# Async Safety Tests (issue #424)
+# ============================================================================
+
+
+class TestAsyncSafety:
+    """Test that async methods do not call run_until_complete from a running loop."""
+
+    @patch.object(KubernetesProvider, "_run_kubectl")
+    async def test_aggregate_results_works_in_async_context(
+        self,
+        mock_kubectl: MagicMock,
+        k8s_provider: KubernetesProvider,
+    ) -> None:
+        """Test _aggregate_results works when called from an async context.
+
+        Previously, _aggregate_results called
+        asyncio.get_event_loop().run_until_complete() which raises
+        RuntimeError when already inside a running event loop.
+        """
+        k8s_provider.namespace = "mcpbr"
+        k8s_provider.job_name = "mcpbr-eval-123"
+
+        # Mock _run_kubectl: first call for _get_pod_names, rest for pod logs
+        pod_names_result = Mock(returncode=0, stdout="pod-1 pod-2")
+        log_result = Mock(
+            returncode=0,
+            stdout='{"metadata": {}, "summary": {"total_cost": 0.1, '
+            '"total_tokens_input": 100, "total_tokens_output": 50}, '
+            '"tasks": [{"mcp": {"resolved": true}}]}',
+        )
+        mock_kubectl.side_effect = [pod_names_result, log_result, log_result]
+
+        result = await k8s_provider._aggregate_results()
+        assert result["summary"]["total_tasks"] == 2
+        assert result["metadata"]["infrastructure"] == "kubernetes"
+
+    @patch.object(KubernetesProvider, "_run_kubectl")
+    @patch.object(KubernetesProvider, "_aggregate_results")
+    async def test_collect_artifacts_calls_aggregate_from_async(
+        self,
+        mock_aggregate: MagicMock,
+        mock_kubectl: MagicMock,
+        k8s_provider: KubernetesProvider,
+        tmp_path,
+    ) -> None:
+        """Test collect_artifacts can call _aggregate_results from async context."""
+        k8s_provider.namespace = "mcpbr"
+        k8s_provider.job_name = "mcpbr-eval-123"
+
+        # Mock _get_pod_names via _run_kubectl
+        mock_kubectl.return_value = Mock(returncode=0, stdout="pod-1")
+        mock_aggregate.return_value = {
+            "metadata": {},
+            "summary": {},
+            "tasks": [],
+        }
+
+        output_dir = tmp_path / "artifacts"
+        archive_path = await k8s_provider.collect_artifacts(output_dir)
+        assert archive_path.exists()

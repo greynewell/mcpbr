@@ -647,7 +647,7 @@ class KubernetesProvider(InfrastructureProvider):
             result.stdout if result.returncode == 0 else f"[error fetching logs: {result.stderr}]"
         )
 
-    def _aggregate_results(self) -> dict[str, Any]:
+    async def _aggregate_results(self) -> dict[str, Any]:
         """Collect and merge evaluation results from all Job pods.
 
         Each pod writes its results as structured JSON to stdout. This
@@ -659,7 +659,7 @@ class KubernetesProvider(InfrastructureProvider):
         """
         self._console.print("[cyan]Aggregating results from pods...[/cyan]")
 
-        pod_names = asyncio.get_event_loop().run_until_complete(self._get_pod_names())
+        pod_names = await self._get_pod_names()
         all_tasks: list[dict[str, Any]] = []
         metadata: dict[str, Any] = {}
         total_cost = 0.0
@@ -839,7 +839,7 @@ class KubernetesProvider(InfrastructureProvider):
                 self._error_occurred = True
                 raise RuntimeError(f"Job '{self.job_name}' failed. Check pod logs for details.")
 
-            aggregated = self._aggregate_results()
+            aggregated = await self._aggregate_results()
 
             # Convert to EvaluationResults
             return EvaluationResults(
@@ -881,7 +881,7 @@ class KubernetesProvider(InfrastructureProvider):
 
         # Save aggregated results
         try:
-            aggregated = self._aggregate_results()
+            aggregated = await self._aggregate_results()
             results_file = output_dir / "results.json"
             results_file.write_text(
                 json.dumps(aggregated, indent=2, default=str),

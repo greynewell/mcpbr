@@ -590,11 +590,10 @@ class ClaudeCodeHarness:
             safe_key = key.replace("-", "_").replace(".", "_")
             env_exports += f"export {safe_key}={shlex.quote(value)}\n"
 
-        if env_exports:
-            await env.exec_command(
-                f"cat > {env_file} << 'MCPBR_SETUP_ENV_EOF'\n{env_exports}MCPBR_SETUP_ENV_EOF",
-                timeout=10,
-            )
+        await env.exec_command(
+            f"cat > {env_file} << 'MCPBR_SETUP_ENV_EOF'\n{env_exports}MCPBR_SETUP_ENV_EOF",
+            timeout=10,
+        )
 
         setup_full_cmd = f"source {shlex.quote(env_file)} && {setup_cmd}"
 
@@ -711,7 +710,7 @@ class ClaudeCodeHarness:
                 )
                 formatter = StreamEventFormatter(self._console, config, self.log_file)
 
-                run_type = "mcp" if self.mcp_server else "baseline"
+                run_type = "mcp" if mcp_server_name else "baseline"
                 formatter.print_run_start(instance_id, run_type)
 
                 exit_code, stdout, stderr = await _run_cli_streaming(
@@ -1000,7 +999,7 @@ class ClaudeCodeHarness:
             # Set up MCP server log file if MCP is enabled
             mcp_log_file = None
             mcp_log_path = None
-            if self.mcp_server:
+            if mcp_server_name:
                 from pathlib import Path
 
                 # Determine logs directory: use mcp_logs_dir if provided, otherwise fall back to home directory
@@ -1024,7 +1023,7 @@ class ClaudeCodeHarness:
                 )
                 formatter = StreamEventFormatter(self._console, config, self.log_file)
 
-                run_type = "mcp" if self.mcp_server else "baseline"
+                run_type = "mcp" if mcp_server_name else "baseline"
                 formatter.print_run_start(instance_id, run_type)
 
                 def on_stdout(line: str) -> None:
@@ -1091,7 +1090,7 @@ class ClaudeCodeHarness:
                     else:
                         error_msg = f"Agent failed before making any progress (exit {exit_code}). {error_msg}"
 
-                    if self.mcp_server:
+                    if mcp_server_name:
                         error_msg += f"\n\nMCP server was registered: {mcp_server_name}. Check MCP server logs for initialization issues."
                         if mcp_log_path:
                             error_msg += f"\nMCP server logs saved to: {mcp_log_path}"
@@ -1215,7 +1214,7 @@ class ClaudeCodeHarness:
                         self._console.print(f"[dim red]Failed to clean up .mcp.json: {e}[/dim red]")
 
             error_msg = f"Task execution timed out after {timeout}s."
-            if self.mcp_server:
+            if mcp_server_name:
                 error_msg += f" MCP server '{mcp_server_name}' was registered successfully but the agent failed to complete within the timeout."
                 if mcp_log_path:
                     error_msg += f"\nMCP server logs saved to: {mcp_log_path}"

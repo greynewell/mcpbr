@@ -130,6 +130,16 @@ class MCPServerConfig(BaseModel):
         "reads with native tools.",
     )
 
+    @model_validator(mode="after")
+    def validate_setup_only_requires_setup_command(self) -> "MCPServerConfig":
+        """Ensure setup_command is provided when setup_only is True."""
+        if self.setup_only and not self.setup_command:
+            raise ValueError(
+                "setup_command is required when setup_only is True. "
+                "Without it, no MCP server is started and no setup runs."
+            )
+        return self
+
     def get_args_for_workdir(self, workdir: str) -> list[str]:
         """Replace {workdir} placeholder in args with actual path."""
         result = []

@@ -581,8 +581,21 @@ class ClaudeCodeHarness:
                 f"[cyan]Running setup command (timeout: {setup_timeout:.0f}s)...[/cyan]"
             )
 
-        # Source the env file so setup_command has access to API keys etc.
+        # Create env file with MCP server env vars so setup_command has access
+        # to API keys etc. This runs before _solve_in_docker which creates the
+        # full env file, so we write a minimal version here.
         env_file = "/tmp/.mcpbr_env.sh"
+        env_exports = ""
+        for key, value in self.mcp_server.get_expanded_env().items():
+            safe_key = key.replace("-", "_").replace(".", "_")
+            env_exports += f"export {safe_key}={shlex.quote(value)}\n"
+
+        if env_exports:
+            await env.exec_command(
+                f"cat > {env_file} << 'MCPBR_SETUP_ENV_EOF'\n{env_exports}MCPBR_SETUP_ENV_EOF",
+                timeout=10,
+            )
+
         setup_full_cmd = f"source {shlex.quote(env_file)} && {setup_cmd}"
 
         # Run as the mcpbr user so files created by setup_command are

@@ -549,7 +549,7 @@ class ClaudeCodeHarness:
         self.model = model
         self.mcp_server = mcp_server
         self.prompt_template = prompt or DEFAULT_PROMPT
-        if mcp_server:
+        if mcp_server and not mcp_server.setup_only:
             self.prompt_template += MCP_PROMPT_SUFFIX
         self.max_iterations = max_iterations
         self.verbosity = verbosity
@@ -645,7 +645,7 @@ class ClaudeCodeHarness:
 
         mcp_server_name = None
         mcp_json_path = None
-        if self.mcp_server:
+        if self.mcp_server and not self.mcp_server.setup_only:
             mcp_server_name = self.mcp_server.name
             args = self.mcp_server.get_args_for_workdir(workdir)
             mcp_env = self.mcp_server.get_expanded_env()
@@ -825,9 +825,9 @@ class ClaudeCodeHarness:
             "USER": "mcpbr",
         }
 
-        # Add MCP timeout configuration if MCP server is configured
+        # Add MCP timeout configuration if MCP server is configured (skip for setup_only)
         # See: https://code.claude.com/docs/en/settings.md
-        if self.mcp_server:
+        if self.mcp_server and not self.mcp_server.setup_only:
             docker_env["MCP_TIMEOUT"] = str(self.mcp_server.startup_timeout_ms)
             docker_env["MCP_TOOL_TIMEOUT"] = str(self.mcp_server.tool_timeout_ms)
 
@@ -851,16 +851,17 @@ class ClaudeCodeHarness:
 
         # Add MCP server env vars and timeout configuration
         if self.mcp_server:
-            # Add MCP timeout configuration for Claude CLI
-            # See: https://code.claude.com/docs/en/settings.md
-            env_exports += (
-                f"export MCP_TIMEOUT={shlex.quote(str(self.mcp_server.startup_timeout_ms))}\n"
-            )
-            env_exports += (
-                f"export MCP_TOOL_TIMEOUT={shlex.quote(str(self.mcp_server.tool_timeout_ms))}\n"
-            )
+            if not self.mcp_server.setup_only:
+                # Add MCP timeout configuration for Claude CLI
+                # See: https://code.claude.com/docs/en/settings.md
+                env_exports += (
+                    f"export MCP_TIMEOUT={shlex.quote(str(self.mcp_server.startup_timeout_ms))}\n"
+                )
+                env_exports += (
+                    f"export MCP_TOOL_TIMEOUT={shlex.quote(str(self.mcp_server.tool_timeout_ms))}\n"
+                )
 
-            # Add user-defined MCP server env vars
+            # Add user-defined MCP server env vars (always needed -- setup_command uses them)
             for key, value in self.mcp_server.get_expanded_env().items():
                 # Sanitize key (must be valid shell identifier) and quote value
                 safe_key = key.replace("-", "_").replace(".", "_")
@@ -877,8 +878,9 @@ class ClaudeCodeHarness:
         await env.exec_command(f"chown mcpbr:mcpbr {env_file}", timeout=5)
 
         # Register MCP server if configured (separate from main execution for better error reporting)
+        # Skip when setup_only -- no MCP server to register, agent uses native tools.
         mcp_server_name = None
-        if self.mcp_server:
+        if self.mcp_server and not self.mcp_server.setup_only:
             mcp_server_name = self.mcp_server.name
             args = self.mcp_server.get_args_for_workdir(env.workdir)
             args_str = " ".join(args)

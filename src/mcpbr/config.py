@@ -835,6 +835,14 @@ class HarnessConfig(BaseModel):
         description="Send progress notification every N minutes (0 = disabled).",
     )
 
+    @field_validator("notify_progress_interval", "notify_progress_time_minutes")
+    @classmethod
+    def validate_notify_progress_intervals(cls, v: int) -> int:
+        """Validate progress notification intervals are non-negative."""
+        if v < 0:
+            raise ValueError("progress notification intervals must be >= 0")
+        return v
+
     @model_validator(mode="after")
     def validate_stratified_sampling(self) -> "HarnessConfig":
         """Ensure stratify_field is set when using stratified sampling."""

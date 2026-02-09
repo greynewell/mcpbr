@@ -1070,7 +1070,7 @@ def _dispatch_lifecycle_event(
         )
         dispatch_notification(notify_config, event)
     except Exception:
-        pass  # Notifications must never block the evaluation flow
+        logger.debug("Notification dispatch failed", exc_info=True)
 
 
 class _ProgressTracker:
@@ -1353,6 +1353,10 @@ async def run_evaluation(
                 "max_concurrent": config.max_concurrent,
                 "infrastructure_mode": infra_mode,
                 "mcp_server": _describe_mcp_server(config),
+                "output_dir": str(config.output_dir)
+                if getattr(config, "output_dir", None)
+                else None,
+                "run_id": incremental_save_path.stem if incremental_save_path else None,
             },
         )
 
@@ -1629,6 +1633,20 @@ async def run_evaluation(
                                 elapsed = now - eval_start_time
                                 avg = elapsed / len(results) if results else 0
                                 remaining = avg * (len(tasks_to_run) - len(results))
+                                resolved = sum(
+                                    1
+                                    for r in results
+                                    if (r.mcp and r.mcp.get("resolved"))
+                                    or (r.mcp_server_a and r.mcp_server_a.get("resolved"))
+                                    or (r.mcp_server_b and r.mcp_server_b.get("resolved"))
+                                )
+                                failed = sum(
+                                    1
+                                    for r in results
+                                    if (r.mcp and r.mcp.get("error"))
+                                    or (r.mcp_server_a and r.mcp_server_a.get("error"))
+                                    or (r.mcp_server_b and r.mcp_server_b.get("error"))
+                                )
                                 _dispatch_lifecycle_event(
                                     notify_config,
                                     config,
@@ -1636,6 +1654,8 @@ async def run_evaluation(
                                     extra={
                                         "completed": len(results),
                                         "total": len(tasks_to_run),
+                                        "resolved": resolved,
+                                        "failed": failed,
                                         "elapsed_seconds": elapsed,
                                         "estimated_remaining_seconds": remaining,
                                         "running_cost": current_cost,
@@ -1721,6 +1741,20 @@ async def run_evaluation(
                                 elapsed = now - eval_start_time
                                 avg = elapsed / len(results) if results else 0
                                 remaining = avg * (len(tasks_to_run) - len(results))
+                                resolved = sum(
+                                    1
+                                    for r in results
+                                    if (r.mcp and r.mcp.get("resolved"))
+                                    or (r.mcp_server_a and r.mcp_server_a.get("resolved"))
+                                    or (r.mcp_server_b and r.mcp_server_b.get("resolved"))
+                                )
+                                failed = sum(
+                                    1
+                                    for r in results
+                                    if (r.mcp and r.mcp.get("error"))
+                                    or (r.mcp_server_a and r.mcp_server_a.get("error"))
+                                    or (r.mcp_server_b and r.mcp_server_b.get("error"))
+                                )
                                 _dispatch_lifecycle_event(
                                     notify_config,
                                     config,
@@ -1728,6 +1762,8 @@ async def run_evaluation(
                                     extra={
                                         "completed": len(results),
                                         "total": len(tasks_to_run),
+                                        "resolved": resolved,
+                                        "failed": failed,
                                         "elapsed_seconds": elapsed,
                                         "estimated_remaining_seconds": remaining,
                                         "running_cost": current_cost,
@@ -1755,7 +1791,16 @@ async def run_evaluation(
     except Exception as exc:
         # Dispatch failure notification (#416)
         if notify_config:
-            last_task = results[-1].instance_id if results else None
+            last_resolved = next(
+                (
+                    r.instance_id
+                    for r in reversed(results)
+                    if (r.mcp and r.mcp.get("resolved"))
+                    or (r.mcp_server_a and r.mcp_server_a.get("resolved"))
+                    or (r.mcp_server_b and r.mcp_server_b.get("resolved"))
+                ),
+                None,
+            )
             _dispatch_lifecycle_event(
                 notify_config,
                 config,
@@ -1764,7 +1809,7 @@ async def run_evaluation(
                     "error": str(exc),
                     "completed_tasks": len(results),
                     "total_tasks": len(tasks_to_run),
-                    "last_successful_task": last_task,
+                    "last_successful_task": last_resolved,
                 },
             )
         raise
@@ -2023,7 +2068,7 @@ async def run_evaluation(
             )
             dispatch_notification(notify_config, event)
     except Exception:
-        pass  # Notifications must never block the evaluation flow
+        logger.debug("Notification dispatch failed", exc_info=True)
 
     return EvaluationResults(
         metadata=metadata,

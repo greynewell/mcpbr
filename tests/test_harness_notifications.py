@@ -3,6 +3,8 @@
 import time
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from mcpbr.harness import (
     _build_notify_config,
     _describe_mcp_server,
@@ -10,16 +12,18 @@ from mcpbr.harness import (
     _ProgressTracker,
 )
 
+pytestmark = pytest.mark.integration
+
 
 class TestBuildNotifyConfig:
     """Tests for _build_notify_config helper."""
 
-    def test_returns_empty_when_no_channels(self):
+    def test_returns_empty_when_no_channels(self) -> None:
         config = MagicMock(spec=[])
         result = _build_notify_config(config)
         assert result == {}
 
-    def test_returns_slack_webhook(self):
+    def test_returns_slack_webhook(self) -> None:
         config = MagicMock()
         config.notify_slack_webhook = "https://hooks.slack.com/test"
         config.notify_discord_webhook = None
@@ -30,25 +34,25 @@ class TestBuildNotifyConfig:
         result = _build_notify_config(config)
         assert result["slack_webhook"] == "https://hooks.slack.com/test"
 
-    def test_returns_multiple_keys(self):
+    def test_returns_multiple_keys(self) -> None:
         config = MagicMock()
         config.notify_slack_webhook = "https://hooks.slack.com/test"
         config.notify_discord_webhook = "https://discord.com/api/webhooks/test"
         config.notify_email = None
-        config.slack_bot_token = "xoxb-token"
+        config.slack_bot_token = "xoxb-token"  # noqa: S105
         config.slack_channel = "#evals"
         config.github_token = None
         result = _build_notify_config(config)
         assert result["slack_webhook"] == "https://hooks.slack.com/test"
         assert result["discord_webhook"] == "https://discord.com/api/webhooks/test"
-        assert result["slack_bot_token"] == "xoxb-token"
+        assert result["slack_bot_token"] == "xoxb-token"  # noqa: S105
         assert result["slack_channel"] == "#evals"
 
 
 class TestDescribeMcpServer:
     """Tests for _describe_mcp_server helper."""
 
-    def test_command_server(self):
+    def test_command_server(self) -> None:
         config = MagicMock()
         config.comparison_mode = False
         srv = MagicMock()
@@ -60,7 +64,7 @@ class TestDescribeMcpServer:
         assert "npx" in result
         assert "test-server" in result
 
-    def test_server_without_command(self):
+    def test_server_without_command(self) -> None:
         config = MagicMock()
         config.comparison_mode = False
         srv = MagicMock()
@@ -70,7 +74,7 @@ class TestDescribeMcpServer:
         result = _describe_mcp_server(config)
         assert "my-server" in result
 
-    def test_no_server(self):
+    def test_no_server(self) -> None:
         config = MagicMock()
         config.comparison_mode = False
         config.mcp_server = None
@@ -82,7 +86,7 @@ class TestDispatchLifecycleEvent:
     """Tests for _dispatch_lifecycle_event helper."""
 
     @patch("mcpbr.notifications.dispatch_notification")
-    def test_dispatches_event(self, mock_dispatch):
+    def test_dispatches_event(self, mock_dispatch: MagicMock) -> None:
         notify_config = {"slack_webhook": "https://test"}
         config = MagicMock()
         config.benchmark = "swe-bench-verified"
@@ -96,7 +100,7 @@ class TestDispatchLifecycleEvent:
         assert event.extra["total_tasks"] == 10
 
     @patch("mcpbr.notifications.dispatch_notification")
-    def test_suppresses_exceptions(self, mock_dispatch):
+    def test_suppresses_exceptions(self, mock_dispatch: MagicMock) -> None:
         mock_dispatch.side_effect = RuntimeError("boom")
         notify_config = {"slack_webhook": "https://test"}
         config = MagicMock()
@@ -109,11 +113,11 @@ class TestDispatchLifecycleEvent:
 class TestProgressTracker:
     """Tests for _ProgressTracker."""
 
-    def test_disabled_when_zero(self):
+    def test_disabled_when_zero(self) -> None:
         tracker = _ProgressTracker(task_interval=0, time_interval_minutes=0, start_time=time.time())
         assert not tracker.should_notify(5, time.time())
 
-    def test_task_interval(self):
+    def test_task_interval(self) -> None:
         now = time.time()
         tracker = _ProgressTracker(task_interval=5, time_interval_minutes=0, start_time=now)
         assert not tracker.should_notify(3, now)
@@ -122,13 +126,13 @@ class TestProgressTracker:
         assert not tracker.should_notify(7, now)
         assert tracker.should_notify(10, now)
 
-    def test_time_interval(self):
+    def test_time_interval(self) -> None:
         past = time.time() - 120  # 2 minutes ago
         tracker = _ProgressTracker(task_interval=0, time_interval_minutes=1, start_time=past)
         # last_notified_time is set to start_time (2 min ago), so should trigger
         assert tracker.should_notify(1, time.time())
 
-    def test_no_notification_before_interval(self):
+    def test_no_notification_before_interval(self) -> None:
         now = time.time()
         tracker = _ProgressTracker(task_interval=0, time_interval_minutes=5, start_time=now)
         # Only 1 second has passed, should not trigger

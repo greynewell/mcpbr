@@ -24,6 +24,7 @@ tasks:
     language: typescript
     scope_prefix: "src"
     description: "Remove unused exports via Knip -- 30+ exported functions"
+    zip_exclude: ["loc/*", "lib/*", "harness/*", "testRunner/*", "*.lcl", "*.d.ts"]
 
   - id: n8n_pr23572
     repo: n8n-io/n8n

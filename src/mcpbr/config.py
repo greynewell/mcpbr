@@ -899,6 +899,11 @@ class HarnessConfig(BaseModel):
         description="API key for Supermodel API (or use SUPERMODEL_API_KEY env var)",
     )
 
+    supermodel_api_timeout: int = Field(
+        default=900,
+        description="Max seconds to wait for Supermodel API analysis to complete",
+    )
+
     resolved_threshold: float = Field(
         default=0.8,
         description="Precision & recall threshold to consider a task resolved",

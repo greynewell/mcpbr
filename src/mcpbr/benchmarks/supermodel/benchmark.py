@@ -5,12 +5,15 @@ via endpoint plugins. Uses GitHub PRs for ground truth extraction and the Superm
 API for pre-computed analysis in the enhanced (MCP) condition.
 """
 
+import hashlib
 import json
 import logging
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +53,7 @@ class SupermodelBenchmark:
         supermodel_api_key: str | None = None,
         resolved_threshold: float = 0.8,
         ground_truth_dir: str | Path | None = None,
+        supermodel_api_timeout: int = 900,
         **kwargs: Any,
     ):
         """Initialize the Supermodel benchmark.
@@ -62,12 +66,14 @@ class SupermodelBenchmark:
             supermodel_api_key: API key (or set SUPERMODEL_API_KEY env var).
             resolved_threshold: P & R threshold to consider a task 'resolved'.
             ground_truth_dir: Directory to cache ground truth JSON files.
+            supermodel_api_timeout: Max seconds to wait for Supermodel API (default 900).
             **kwargs: Additional keyword arguments (ignored for forward compat).
         """
         self.analysis_type = analysis_type
         self._tasks_config = tasks or []
         self.api_base = supermodel_api_base
         self.api_key = supermodel_api_key or os.environ.get("SUPERMODEL_API_KEY")
+        self.api_timeout = supermodel_api_timeout
         self.resolved_threshold = resolved_threshold
         self.gt_dir = Path(ground_truth_dir) if ground_truth_dir else DEFAULT_GT_DIR
         self.gt_dir.mkdir(parents=True, exist_ok=True)
@@ -133,6 +139,8 @@ class SupermodelBenchmark:
                 "problem_statement": self._generate_baseline_problem_statement(task_cfg),
                 "problem_statement_enhanced": self._generate_enhanced_problem_statement(task_cfg),
                 "problem_statement_baseline": self._generate_baseline_problem_statement(task_cfg),
+                "zip_exclude": task_cfg.get("zip_exclude", []),
+                "cached_analysis": task_cfg.get("cached_analysis"),
             }
             tasks.append(task)
 
@@ -372,10 +380,24 @@ are better than false negatives for this analysis."""
         report_path = Path(host_workdir) / "REPORT.json"
         report_path.write_text(REPORT_PLACEHOLDER)
 
-        # For MCP (enhanced) condition: call Supermodel API and place analysis JSON
+        # For MCP (enhanced) condition: place analysis JSON in workdir
+        # Priority: 1) cached_analysis file from task config, 2) Supermodel API call
         if is_mcp:
             try:
-                analysis_json = await self._get_analysis(repo_dir, instance_id, scope_prefix)
+                cached_path = task.get("cached_analysis")
+                if cached_path and Path(cached_path).exists():
+                    with open(cached_path) as f:
+                        analysis_json = json.load(f)
+                    print(
+                        f"  Using cached analysis: {cached_path}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                else:
+                    exclude_patterns = task.get("zip_exclude", [])
+                    analysis_json = await self._get_analysis(
+                        repo_dir, instance_id, scope_prefix, exclude_patterns
+                    )
 
                 # Slim down the analysis for agent consumption:
                 # 1. Strip verbose fields (code snippets, descriptions) — agent
@@ -389,15 +411,14 @@ are better than false negatives for this analysis."""
                     if key in analysis_json:
                         items = analysis_json[key]
                         # Strip to essential fields
-                        items = [{k: v for k, v in item.items() if k in keep_fields}
-                                 for item in items]
+                        items = [
+                            {k: v for k, v in item.items() if k in keep_fields} for item in items
+                        ]
                         # Truncate
                         if len(items) > max_candidates:
                             total = len(items)
                             items = items[:max_candidates]
-                            logger.warning(
-                                f"Truncated {key} from {total} to {max_candidates}"
-                            )
+                            logger.warning(f"Truncated {key} from {total} to {max_candidates}")
                         analysis_json[key] = items
 
                 # Also strip top-level verbose metadata
@@ -409,6 +430,12 @@ are better than false negatives for this analysis."""
                 logger.info(f"Placed analysis at {analysis_path}")
             except Exception as e:
                 logger.error(f"Failed to get Supermodel analysis for {instance_id}: {e}")
+                print(
+                    f"\n*** SUPERMODEL ANALYSIS FAILED for {instance_id} ***\n"
+                    f"{traceback.format_exc()}",
+                    file=sys.stderr,
+                    flush=True,
+                )
 
         # Start Docker container
         container_name = f"mcpbr-{docker_manager._session_id}-{instance_id}"
@@ -475,16 +502,31 @@ are better than false negatives for this analysis."""
         repo_dir: Path,
         task_id: str,
         scope_prefix: str | None,
+        exclude_patterns: list[str] | None = None,
     ) -> dict:
-        """Call Supermodel API and return parsed/filtered analysis."""
+        """Call Supermodel API and return parsed/filtered analysis.
+
+        Results are cached in gt_dir/{task_id}_analysis.json keyed by zip hash
+        so subsequent runs skip the API call.
+        """
         zip_path = str(self._work_dir / f"{task_id}.zip")
-        await zip_repo(str(repo_dir), zip_path, scope_prefix)
+        await zip_repo(str(repo_dir), zip_path, scope_prefix, exclude_patterns)
+
+        # Check cache
+        with open(zip_path, "rb") as f:
+            zip_hash = hashlib.sha256(f.read()).hexdigest()[:12]
+        cache_path = self.gt_dir / f"{task_id}_analysis_{zip_hash}.json"
+        if cache_path.exists():
+            logger.info(f"Using cached analysis: {cache_path}")
+            with open(cache_path) as f:
+                return json.load(f)
 
         raw_response = await call_supermodel_api(
             endpoint_path=self._endpoint.api_path,
             zip_path=zip_path,
             api_base=self.api_base,
             api_key=self.api_key,
+            max_poll_time=self.api_timeout,
         )
 
         result = self._endpoint.parse_api_response(raw_response)
@@ -498,6 +540,10 @@ are better than false negatives for this analysis."""
                         fp = item.get("file", "")
                         if fp.startswith(prefix):
                             item["file"] = fp[len(prefix) :]
+
+        # Cache the result for future runs
+        cache_path.write_text(json.dumps(result, indent=2))
+        logger.info(f"Cached analysis at {cache_path}")
 
         return result
 

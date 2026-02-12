@@ -1185,6 +1185,7 @@ async def run_evaluation(
         benchmark_kwargs["supermodel_api_base"] = config.supermodel_api_base
         if config.supermodel_api_key:
             benchmark_kwargs["supermodel_api_key"] = config.supermodel_api_key
+        benchmark_kwargs["supermodel_api_timeout"] = config.supermodel_api_timeout
         benchmark_kwargs["resolved_threshold"] = config.resolved_threshold
         if config.ground_truth_dir:
             benchmark_kwargs["ground_truth_dir"] = config.ground_truth_dir

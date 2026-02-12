@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import os
 import subprocess
 
 logger = logging.getLogger("mcpbr.supermodel")
@@ -89,56 +88,49 @@ def get_pre_merge_commit(repo: str, merge_commit: str) -> str:
     return result.stdout.strip()
 
 
-async def zip_repo(repo_dir: str, output_zip: str, scope_prefix: str | None = None) -> str:
-    """Create a zip of the repo for Supermodel API using git archive.
+async def zip_repo(
+    repo_dir: str,
+    output_zip: str,
+    scope_prefix: str | None = None,
+    exclude_patterns: list[str] | None = None,
+) -> str:
+    """Create a zip of the repo for Supermodel API.
+
+    Uses `zip` command with exclude patterns for fine-grained control.
 
     Args:
         repo_dir: Path to the repository directory.
         output_zip: Path for the output zip file.
         scope_prefix: Optional subdirectory to scope the archive to.
+        exclude_patterns: Optional glob patterns to exclude (e.g. ["loc/*", "lib/*"]).
 
     Returns:
         Path to the created zip file.
     """
-    git_dir = os.path.join(repo_dir, ".git")
-    if os.path.isdir(git_dir):
-        cmd = ["git", "archive", "-o", output_zip, "HEAD"]
-        if scope_prefix:
-            cmd.append(scope_prefix)
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            cwd=repo_dir,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
-        if proc.returncode != 0:
-            raise RuntimeError(f"git archive failed: {stderr.decode()}")
-    else:
-        target = os.path.join(repo_dir, scope_prefix) if scope_prefix else repo_dir
-        proc = await asyncio.create_subprocess_exec(
-            "zip",
-            "-r",
-            "-q",
-            output_zip,
-            ".",
-            "-x",
-            "node_modules/*",
-            "-x",
-            ".git/*",
-            "-x",
-            "dist/*",
-            "-x",
-            "build/*",
-            "-x",
-            "*.pyc",
-            "-x",
-            "__pycache__/*",
-            cwd=target,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
-        if proc.returncode != 0:
-            raise RuntimeError(f"zip failed: {stderr.decode()}")
+    zip_target = scope_prefix if scope_prefix else "."
+    base_excludes = [
+        "node_modules/*", ".git/*", "dist/*", "build/*",
+        "*.pyc", "__pycache__/*",
+    ]
+    # Prepend scope_prefix to exclude patterns so they match archive paths
+    prefixed_excludes = []
+    for pattern in base_excludes + (exclude_patterns or []):
+        if scope_prefix and not pattern.startswith(scope_prefix):
+            prefixed_excludes.append(f"{scope_prefix}/{pattern}")
+        else:
+            prefixed_excludes.append(pattern)
+
+    cmd = ["zip", "-r", "-q", output_zip, zip_target]
+    for pattern in prefixed_excludes:
+        cmd.extend(["-x", pattern])
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        cwd=repo_dir,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+    if proc.returncode != 0:
+        raise RuntimeError(f"zip failed: {stderr.decode()}")
     return output_zip

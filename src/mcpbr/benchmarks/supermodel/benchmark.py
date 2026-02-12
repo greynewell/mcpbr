@@ -93,15 +93,26 @@ class SupermodelBenchmark:
         tasks = []
         for task_cfg in self._tasks_config:
             task_id = task_cfg["id"]
-            repo = task_cfg["repo"]
-            pr_number = task_cfg["pr_number"]
-            merge_commit = task_cfg["merge_commit"]
+            repo = task_cfg.get("repo", "")
             language = task_cfg.get("language", "typescript")
             scope_prefix = task_cfg.get("scope_prefix")
             description = task_cfg.get("description", "")
 
-            # Load or extract ground truth
-            gt = self._load_ground_truth(task_id, repo, pr_number, language, scope_prefix)
+            # Corpus mode: ground_truth_file points to a pre-existing GT JSON
+            gt_file = task_cfg.get("ground_truth_file")
+            if gt_file:
+                gt_path = Path(gt_file).expanduser()
+                if gt_path.exists():
+                    with open(gt_path) as f:
+                        gt = json.load(f)
+                    logger.info(f"Loaded corpus GT: {len(gt)} items from {gt_path}")
+                else:
+                    logger.warning(f"GT file not found: {gt_path}, skipping {task_id}")
+                    continue
+            else:
+                # PR mode: extract from diff
+                pr_number = task_cfg["pr_number"]
+                gt = self._load_ground_truth(task_id, repo, pr_number, language, scope_prefix)
 
             if not gt:
                 logger.warning(f"No ground truth for {task_id}, skipping")
@@ -110,8 +121,10 @@ class SupermodelBenchmark:
             task = {
                 "instance_id": task_id,
                 "repo": repo,
-                "pr_number": pr_number,
-                "merge_commit": merge_commit,
+                "pr_number": task_cfg.get("pr_number"),
+                "merge_commit": task_cfg.get("merge_commit", task_cfg.get("commit", "HEAD")),
+                "commit": task_cfg.get("commit"),
+                "clone_url": task_cfg.get("clone_url"),
                 "language": language,
                 "scope_prefix": scope_prefix,
                 "description": description,
@@ -177,6 +190,21 @@ class SupermodelBenchmark:
         language = task_cfg.get("language", "typescript")
         analysis_file = self._endpoint.analysis_filename
 
+        ext = ".ts" if language == "typescript" else ".py"
+        if language == "python":
+            lang_examples = """IMPORTANT DISTINCTIONS:
+- A function listed in __all__ but never actually imported/called = DEAD
+- Two functions that only call each other but nothing calls either = DEAD cluster
+- A cleanup function registered with atexit but whose state is never populated = DEAD
+- A constant that is only referenced in its own module's dead functions = DEAD"""
+        else:
+            lang_examples = """IMPORTANT DISTINCTIONS:
+- An exported function that is never imported or called by any other module = DEAD
+- Two functions that only call each other but nothing calls either = DEAD cluster
+- A method on a class where the class itself is never instantiated = DEAD
+- A constant that is only referenced in its own module's dead functions = DEAD
+- Middleware or handlers that are defined but never registered with the router = DEAD"""
+
         return f"""You are a code analyst. Find all dead code in this {language} codebase.
 
 A call graph analyzer has already analyzed this codebase and identified dead code
@@ -185,14 +213,10 @@ candidates. The results are in `{analysis_file}`.
 The analyzer uses full call graph reachability -- it traces which functions are
 actually called from entry points, not just whether a name appears in the code.
 This means its candidates ARE unreachable code, even if the name appears elsewhere
-(e.g., in __all__ exports, self-recursive calls, or atexit registrations that
-reference unused state).
+(e.g., in self-recursive calls, re-exports that are never consumed, or internal
+helper chains that have no external caller).
 
-IMPORTANT DISTINCTIONS:
-- A function listed in __all__ but never actually imported/called = DEAD
-- Two functions that only call each other but nothing calls either = DEAD cluster
-- A cleanup function registered with atexit but whose state is never populated = DEAD
-- A constant that is only referenced in its own module's dead functions = DEAD
+{lang_examples}
 
 YOUR JOB:
 1. Read `{analysis_file}` to get the candidate list.
@@ -206,7 +230,7 @@ YOUR JOB:
 REPORT.json format:
 {{
   "dead_code": [
-    {{"file": "path/to/file.py", "name": "unused_func", "type": "function", "reason": "unreachable from entry points"}},
+    {{"file": "path/to/file{ext}", "name": "unusedFunc", "type": "function", "reason": "unreachable from entry points"}},
     ...
   ],
   "analysis_complete": true
@@ -221,6 +245,15 @@ Type should be one of: function, class, method, const."""
         """
         language = task_cfg.get("language", "typescript")
 
+        ext = ".ts" if language == "typescript" else ".py"
+        if language == "python":
+            lang_hints = """- Functions in __all__ that are never actually imported by other modules
+- Cleanup/utility functions whose associated state is never populated"""
+        else:
+            lang_hints = """- Exported functions/classes that are never imported by any other module
+- Middleware or handlers that are defined but never registered with the router
+- Methods on classes where the class itself is never instantiated from live code"""
+
         return f"""You are a code analyst. Find all dead code in this {language} codebase.
 
 Dead code = functions, classes, methods, and constants that are defined but never
@@ -228,8 +261,7 @@ used in any meaningful execution path. This includes:
 - Functions/methods defined but never called from any entry point
 - Constants defined but never read by any live code
 - Functions that only call each other (dead clusters) with no external caller
-- Functions in __all__ that are never actually imported by other modules
-- Cleanup/utility functions whose associated state is never populated
+{lang_hints}
 
 YOUR JOB:
 1. List all source files (exclude test files from the dead code search -- tests
@@ -245,13 +277,13 @@ YOUR JOB:
 REPORT.json format:
 {{
   "dead_code": [
-    {{"file": "path/to/file.py", "name": "unused_func", "type": "function", "reason": "no callers from entry points"}},
+    {{"file": "path/to/file{ext}", "name": "unusedFunc", "type": "function", "reason": "no callers from entry points"}},
     ...
   ],
   "analysis_complete": true
 }}
 
-Type should be one of: function, class, method, const.
+Type should be one of: function, class, method, const, interface, variable.
 When in doubt about whether something is dead, INCLUDE it -- false positives
 are better than false negatives for this analysis."""
 
@@ -291,18 +323,24 @@ are better than false negatives for this analysis."""
             )
 
         instance_id = task["instance_id"]
-        repo = task["repo"]
-        merge_commit = task["merge_commit"]
+        repo = task.get("repo", "")
         scope_prefix = task.get("scope_prefix")
 
-        # Get pre-merge commit
-        pre_merge = get_pre_merge_commit(repo, merge_commit)
-        logger.info(f"Pre-merge commit for {instance_id}: {pre_merge[:8]}")
-
-        # Clone repo
+        # Clone repo - corpus mode (clone_url + commit) or PR mode (repo + merge_commit)
         repo_dir = self._work_dir / f"repo-{instance_id}"
         if not repo_dir.exists():
-            await clone_repo_at_commit(repo, pre_merge, str(repo_dir))
+            clone_url = task.get("clone_url")
+            if clone_url:
+                # Corpus mode: clone directly at specified commit
+                commit = task.get("commit", "HEAD")
+                logger.info(f"Corpus mode: cloning {clone_url} at {commit[:8]}")
+                await clone_repo_at_commit(clone_url, commit, str(repo_dir))
+            else:
+                # PR mode: get pre-merge commit from merge commit
+                merge_commit = task["merge_commit"]
+                pre_merge = get_pre_merge_commit(repo, merge_commit)
+                logger.info(f"Pre-merge commit for {instance_id}: {pre_merge[:8]}")
+                await clone_repo_at_commit(repo, pre_merge, str(repo_dir))
 
         # Create Docker environment
         await docker_manager._ensure_fallback_image()
@@ -313,11 +351,17 @@ are better than false negatives for this analysis."""
         host_workdir = temp_dir.name
 
         # Copy repo to workdir (scoped if needed)
+        is_corpus = task.get("clone_url") is not None
         if scope_prefix:
             src_path = repo_dir / scope_prefix
-            dest_path = Path(host_workdir) / scope_prefix
             if src_path.is_dir():
-                shutil.copytree(str(src_path), str(dest_path))
+                if is_corpus:
+                    # Corpus mode: scoped content goes to workdir root so GT paths match
+                    shutil.copytree(str(src_path), host_workdir, dirs_exist_ok=True)
+                else:
+                    # PR mode: preserve directory structure for PR-relative paths
+                    dest_path = Path(host_workdir) / scope_prefix
+                    shutil.copytree(str(src_path), str(dest_path))
             else:
                 shutil.copytree(str(repo_dir), host_workdir, dirs_exist_ok=True)
         else:
@@ -414,7 +458,19 @@ are better than false negatives for this analysis."""
             api_key=self.api_key,
         )
 
-        return self._endpoint.parse_api_response(raw_response)
+        result = self._endpoint.parse_api_response(raw_response)
+
+        # Strip scope_prefix from file paths so they match the workdir layout
+        if scope_prefix:
+            prefix = scope_prefix.rstrip("/") + "/"
+            for key in ("deadCodeCandidates", "candidates", "items"):
+                if key in result:
+                    for item in result[key]:
+                        fp = item.get("file", "")
+                        if fp.startswith(prefix):
+                            item["file"] = fp[len(prefix) :]
+
+        return result
 
     async def evaluate(
         self,

@@ -1,0 +1,31 @@
+# Supermodel Dead Code Detection - TypeScript Express App (102 dead code items)
+# Corpus-mode benchmark using pre-existing ground truth from benchmark-codebases repo.
+#
+# Usage:
+#   uv run mcpbr run --config config/supermodel-deadcode-ts-express.yaml -n 1
+#
+# Note: No mcp_server needed. The enhanced condition uses a pre-computed analysis JSON
+# placed in the workdir by SupermodelBenchmark.create_environment(is_mcp=True).
+
+benchmark: "supermodel"
+analysis_type: "dead-code"
+
+tasks:
+  - id: ts_express_dead_code
+    repo: supermodeltools/benchmark-codebases
+    clone_url: "https://github.com/supermodeltools/benchmark-codebases.git"
+    commit: "fd6eb499a16bbbcfce44a4bcb81610dfe3b5f411"
+    scope_prefix: "dead-code/typescript-express-app"
+    language: typescript
+    ground_truth_file: "~/.cache/mcpbr/supermodel_ground_truth/dead_code_ts_express_app.json"
+    description: "Dead code detection in a 35-file TypeScript Express.js app"
+
+supermodel_api_base: "https://staging.api.supermodeltools.com"
+supermodel_api_key: null
+resolved_threshold: 0.5
+
+provider: "anthropic"
+agent_harness: "claude-code"
+model: "claude-sonnet-4-20250514"
+timeout_seconds: 600
+max_iterations: 30

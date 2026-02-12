@@ -12,11 +12,17 @@ async def clone_repo_at_commit(repo: str, commit: str, dest: str) -> None:
     """Clone a repo and checkout a specific commit.
 
     Args:
-        repo: GitHub repo in 'owner/name' format.
+        repo: GitHub repo in 'owner/name' format, or a full clone URL.
         commit: Git commit SHA to checkout.
         dest: Destination directory path.
     """
     logger.info(f"Cloning {repo} at {commit[:8]} -> {dest}")
+
+    # Support full URLs (https://, git://, ssh://) or owner/name shorthand
+    if repo.startswith(("https://", "http://", "git://", "ssh://", "git@")):
+        clone_url = repo
+    else:
+        clone_url = f"https://github.com/{repo}.git"
 
     proc = await asyncio.create_subprocess_exec(
         "git",
@@ -24,7 +30,7 @@ async def clone_repo_at_commit(repo: str, commit: str, dest: str) -> None:
         "--quiet",
         "--depth",
         "1",
-        f"https://github.com/{repo}.git",
+        clone_url,
         dest,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,

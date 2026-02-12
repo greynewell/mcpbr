@@ -156,6 +156,7 @@ async def _run_cli_streaming(
         stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        limit=1024 * 1024,  # 1MB line limit (default 64KB too small for large JSON)
     )
 
     stdout_lines: list[str] = []

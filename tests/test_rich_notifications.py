@@ -13,6 +13,15 @@ from mcpbr.notifications import (
     send_slack_notification,
 )
 
+try:
+    import slack_sdk  # noqa: F401
+
+    HAS_SLACK_SDK = True
+except ImportError:
+    HAS_SLACK_SDK = False
+
+skip_no_slack = pytest.mark.skipif(not HAS_SLACK_SDK, reason="slack_sdk not installed")
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -151,6 +160,7 @@ class TestEnrichedSlackMessage:
 # ---------------------------------------------------------------------------
 
 
+@skip_no_slack
 class TestSlackBotNotification:
     """Send notification via bot API and post results as threaded reply."""
 
@@ -204,6 +214,7 @@ class TestSlackBotNotification:
             send_slack_bot_notification("xoxb-test", "C12345", _make_event())
 
 
+@skip_no_slack
 class TestSlackThreadReply:
     """Upload results JSON as a file snippet in a Slack thread."""
 

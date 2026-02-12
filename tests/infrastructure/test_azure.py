@@ -826,7 +826,7 @@ class TestEnvironmentSetup:
         all_cmds_str = " ".join(all_cmds)
         assert "apt-get update" in all_cmds_str
         assert "docker" in all_cmds_str.lower()
-        assert "pip install mcpbr" in all_cmds_str
+        assert "mcpbr[slack]" in all_cmds_str
 
     async def test_install_dependencies_handles_failures_gracefully(
         self,
@@ -911,7 +911,7 @@ class TestEnvironmentSetup:
 
         # mcpbr install is the last step
         all_cmds = [call[0][0] for call in mock_client.exec_command.call_args_list]
-        assert any("pip install mcpbr" in cmd for cmd in all_cmds)
+        assert any("mcpbr[slack]" in cmd for cmd in all_cmds)
 
 
 # ============================================================================
@@ -1477,6 +1477,37 @@ class TestUpdatedSetup:
 # ============================================================================
 
 
+def _mock_detached_eval(mock_client, exit_code=0, log_output=""):
+    """Configure mock SSH client for the detached eval execution flow.
+
+    The detached flow calls exec_command multiple times:
+    1. Launch command (contains "echo LAUNCHED")
+    2. Status check (contains "exit_code" and "kill -0")
+    3. Log tail (contains "tail -c")
+    4. (on failure) Error tail (contains "tail -50")
+    """
+
+    def exec_side_effect(cmd, **kwargs):
+        mock_stdin = MagicMock()
+        mock_stdout = MagicMock()
+        mock_stderr = MagicMock()
+
+        if "echo LAUNCHED" in cmd:
+            mock_stdout.read.return_value = b"LAUNCHED\n"
+        elif "kill -0" in cmd:
+            mock_stdout.read.return_value = str(exit_code).encode() + b"\n"
+        elif "tail -c" in cmd:
+            mock_stdout.read.return_value = log_output.encode() if log_output else b""
+        elif "tail -50" in cmd:
+            mock_stdout.read.return_value = log_output.encode() if log_output else b""
+        else:
+            mock_stdout.read.return_value = b""
+
+        return (mock_stdin, mock_stdout, mock_stderr)
+
+    mock_client.exec_command.side_effect = exec_side_effect
+
+
 class TestRemoteExecution:
     """Test remote execution of evaluation on VM."""
 
@@ -1487,18 +1518,8 @@ class TestRemoteExecution:
         """Test run_evaluation executes mcpbr command with correct flags."""
         mock_client = MagicMock()
         azure_provider.ssh_client = mock_client
+        _mock_detached_eval(mock_client, exit_code=0)
 
-        # Mock exec_command for main evaluation
-        mock_stdin = MagicMock()
-        mock_stdout = MagicMock()
-        mock_stdout.__iter__ = Mock(return_value=iter([]))
-        mock_stdout.channel.recv_exit_status.return_value = 0
-        mock_stderr = MagicMock()
-        mock_stderr.read.return_value = b""
-
-        mock_client.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
-
-        # Mock _download_results to return a fake result
         async def mock_download_results():
             from mcpbr.harness import EvaluationResults
 
@@ -1512,25 +1533,17 @@ class TestRemoteExecution:
 
         await azure_provider.run_evaluation(None, run_mcp=True, run_baseline=True)
 
-        # Verify mcpbr was called
+        # Verify mcpbr was called (first exec_command is the launch)
         mock_client.exec_command.assert_called()
-        cmd = mock_client.exec_command.call_args[0][0]
-        assert "mcpbr run" in cmd
-        assert "-c ~/config.yaml" in cmd
+        launch_cmd = mock_client.exec_command.call_args_list[0][0][0]
+        assert "mcpbr run" in launch_cmd
+        assert "-c ~/config.yaml" in launch_cmd
 
     async def test_run_evaluation_with_mcp_only_flag(self, azure_provider: AzureProvider) -> None:
         """Test run_evaluation with mcp_only (-M flag)."""
         mock_client = MagicMock()
         azure_provider.ssh_client = mock_client
-
-        mock_stdin = MagicMock()
-        mock_stdout = MagicMock()
-        mock_stdout.__iter__ = Mock(return_value=iter([]))
-        mock_stdout.channel.recv_exit_status.return_value = 0
-        mock_stderr = MagicMock()
-        mock_stderr.read.return_value = b""
-
-        mock_client.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
+        _mock_detached_eval(mock_client, exit_code=0)
 
         async def mock_download_results():
             from mcpbr.harness import EvaluationResults
@@ -1541,8 +1554,8 @@ class TestRemoteExecution:
 
         await azure_provider.run_evaluation(None, run_mcp=True, run_baseline=False)
 
-        cmd = mock_client.exec_command.call_args[0][0]
-        assert "-M" in cmd
+        launch_cmd = mock_client.exec_command.call_args_list[0][0][0]
+        assert "-M" in launch_cmd
 
     async def test_run_evaluation_with_baseline_only_flag(
         self,
@@ -1551,15 +1564,7 @@ class TestRemoteExecution:
         """Test run_evaluation with baseline_only (-B flag)."""
         mock_client = MagicMock()
         azure_provider.ssh_client = mock_client
-
-        mock_stdin = MagicMock()
-        mock_stdout = MagicMock()
-        mock_stdout.__iter__ = Mock(return_value=iter([]))
-        mock_stdout.channel.recv_exit_status.return_value = 0
-        mock_stderr = MagicMock()
-        mock_stderr.read.return_value = b""
-
-        mock_client.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
+        _mock_detached_eval(mock_client, exit_code=0)
 
         async def mock_download_results():
             from mcpbr.harness import EvaluationResults
@@ -1570,8 +1575,8 @@ class TestRemoteExecution:
 
         await azure_provider.run_evaluation(None, run_mcp=False, run_baseline=True)
 
-        cmd = mock_client.exec_command.call_args[0][0]
-        assert "-B" in cmd
+        launch_cmd = mock_client.exec_command.call_args_list[0][0][0]
+        assert "-B" in launch_cmd
 
     async def test_run_evaluation_with_both_mcp_and_baseline(
         self,
@@ -1580,15 +1585,7 @@ class TestRemoteExecution:
         """Test run_evaluation with both mcp and baseline (no flags)."""
         mock_client = MagicMock()
         azure_provider.ssh_client = mock_client
-
-        mock_stdin = MagicMock()
-        mock_stdout = MagicMock()
-        mock_stdout.__iter__ = Mock(return_value=iter([]))
-        mock_stdout.channel.recv_exit_status.return_value = 0
-        mock_stderr = MagicMock()
-        mock_stderr.read.return_value = b""
-
-        mock_client.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
+        _mock_detached_eval(mock_client, exit_code=0)
 
         async def mock_download_results():
             from mcpbr.harness import EvaluationResults
@@ -1599,24 +1596,15 @@ class TestRemoteExecution:
 
         await azure_provider.run_evaluation(None, run_mcp=True, run_baseline=True)
 
-        cmd = mock_client.exec_command.call_args[0][0]
+        launch_cmd = mock_client.exec_command.call_args_list[0][0][0]
         # Should have no -M or -B flags when running both
-        assert "-M" not in cmd and "-B" not in cmd
+        assert "-M" not in launch_cmd and "-B" not in launch_cmd
 
     async def test_run_evaluation_streams_output(self, azure_provider: AzureProvider) -> None:
-        """Test run_evaluation streams output to console."""
+        """Test run_evaluation streams log output via polling."""
         mock_client = MagicMock()
         azure_provider.ssh_client = mock_client
-
-        mock_stdin = MagicMock()
-        mock_stdout = MagicMock()
-        # Mock stdout to return some lines
-        mock_stdout.__iter__ = Mock(return_value=iter(["Line 1\n", "Line 2\n", "Line 3\n"]))
-        mock_stdout.channel.recv_exit_status.return_value = 0
-        mock_stderr = MagicMock()
-        mock_stderr.read.return_value = b""
-
-        mock_client.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
+        _mock_detached_eval(mock_client, exit_code=0, log_output="Line 1\nLine 2\nLine 3\n")
 
         async def mock_download_results():
             from mcpbr.harness import EvaluationResults
@@ -1627,22 +1615,14 @@ class TestRemoteExecution:
 
         await azure_provider.run_evaluation(None, run_mcp=True, run_baseline=False)
 
-        # Verify stdout was iterated
-        mock_stdout.__iter__.assert_called()
+        # Verify multiple exec_command calls (launch + status check + tail)
+        assert mock_client.exec_command.call_count >= 3
 
     async def test_run_evaluation_handles_success(self, azure_provider: AzureProvider) -> None:
         """Test run_evaluation handles evaluation success (exit code 0)."""
         mock_client = MagicMock()
         azure_provider.ssh_client = mock_client
-
-        mock_stdin = MagicMock()
-        mock_stdout = MagicMock()
-        mock_stdout.__iter__ = Mock(return_value=iter([]))
-        mock_stdout.channel.recv_exit_status.return_value = 0
-        mock_stderr = MagicMock()
-        mock_stderr.read.return_value = b""
-
-        mock_client.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
+        _mock_detached_eval(mock_client, exit_code=0)
 
         async def mock_download_results():
             from mcpbr.harness import EvaluationResults
@@ -1659,15 +1639,7 @@ class TestRemoteExecution:
         """Test run_evaluation handles evaluation failure (non-zero exit code)."""
         mock_client = MagicMock()
         azure_provider.ssh_client = mock_client
-
-        mock_stdin = MagicMock()
-        mock_stdout = MagicMock()
-        mock_stdout.__iter__ = Mock(return_value=iter([]))
-        mock_stdout.channel.recv_exit_status.return_value = 1
-        mock_stderr = MagicMock()
-        mock_stderr.read.return_value = b"Evaluation error\n"
-
-        mock_client.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
+        _mock_detached_eval(mock_client, exit_code=1, log_output="Evaluation error\n")
 
         with pytest.raises(RuntimeError, match="Evaluation failed"):
             await azure_provider.run_evaluation(None, run_mcp=True, run_baseline=False)
@@ -1679,15 +1651,7 @@ class TestRemoteExecution:
         """Test run_evaluation sets _error_occurred flag on failure."""
         mock_client = MagicMock()
         azure_provider.ssh_client = mock_client
-
-        mock_stdin = MagicMock()
-        mock_stdout = MagicMock()
-        mock_stdout.__iter__ = Mock(return_value=iter([]))
-        mock_stdout.channel.recv_exit_status.return_value = 1
-        mock_stderr = MagicMock()
-        mock_stderr.read.return_value = b"error\n"
-
-        mock_client.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
+        _mock_detached_eval(mock_client, exit_code=1, log_output="error\n")
 
         try:
             await azure_provider.run_evaluation(None, run_mcp=True, run_baseline=False)
@@ -1703,15 +1667,7 @@ class TestRemoteExecution:
         """Test run_evaluation returns results from downloaded JSON."""
         mock_client = MagicMock()
         azure_provider.ssh_client = mock_client
-
-        mock_stdin = MagicMock()
-        mock_stdout = MagicMock()
-        mock_stdout.__iter__ = Mock(return_value=iter([]))
-        mock_stdout.channel.recv_exit_status.return_value = 0
-        mock_stderr = MagicMock()
-        mock_stderr.read.return_value = b""
-
-        mock_client.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
+        _mock_detached_eval(mock_client, exit_code=0)
 
         async def mock_download_results():
             from mcpbr.harness import EvaluationResults
@@ -1745,15 +1701,7 @@ class TestRemoteExecution:
 
         mock_client = MagicMock()
         provider.ssh_client = mock_client
-
-        mock_stdin = MagicMock()
-        mock_stdout = MagicMock()
-        mock_stdout.__iter__ = Mock(return_value=iter([]))
-        mock_stdout.channel.recv_exit_status.return_value = 0
-        mock_stderr = MagicMock()
-        mock_stderr.read.return_value = b""
-
-        mock_client.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
+        _mock_detached_eval(mock_client, exit_code=0)
 
         async def mock_download_results():
             from mcpbr.harness import EvaluationResults
@@ -1764,10 +1712,10 @@ class TestRemoteExecution:
 
         await provider.run_evaluation(None, run_mcp=True, run_baseline=True)
 
-        cmd = mock_client.exec_command.call_args[0][0]
-        assert "-t" in cmd
-        assert "sympy__sympy-11400" in cmd
-        assert "sympy__sympy-11870" in cmd
+        launch_cmd = mock_client.exec_command.call_args_list[0][0][0]
+        assert "-t" in launch_cmd
+        assert "sympy__sympy-11400" in launch_cmd
+        assert "sympy__sympy-11870" in launch_cmd
 
     async def test_run_evaluation_no_task_ids_omits_t_flag(
         self,
@@ -1776,15 +1724,7 @@ class TestRemoteExecution:
         """Test that no -t flags when task_ids is None."""
         mock_client = MagicMock()
         azure_provider.ssh_client = mock_client
-
-        mock_stdin = MagicMock()
-        mock_stdout = MagicMock()
-        mock_stdout.__iter__ = Mock(return_value=iter([]))
-        mock_stdout.channel.recv_exit_status.return_value = 0
-        mock_stderr = MagicMock()
-        mock_stderr.read.return_value = b""
-
-        mock_client.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
+        _mock_detached_eval(mock_client, exit_code=0)
 
         async def mock_download_results():
             from mcpbr.harness import EvaluationResults
@@ -1795,8 +1735,8 @@ class TestRemoteExecution:
 
         await azure_provider.run_evaluation(None, run_mcp=True, run_baseline=True)
 
-        cmd = mock_client.exec_command.call_args[0][0]
-        assert "-t" not in cmd
+        launch_cmd = mock_client.exec_command.call_args_list[0][0][0]
+        assert "-t" not in launch_cmd
 
 
 # ============================================================================

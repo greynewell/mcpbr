@@ -619,29 +619,42 @@ class AzureProvider(InfrastructureProvider):
         log_path = "/home/azureuser/mcpbr_eval.log"
         pid_path = "/home/azureuser/mcpbr_eval.pid"
         exit_code_path = "/home/azureuser/mcpbr_eval.exit"
-        # Launch via nohup + setsid so the process is fully detached from SSH
+        # Launch via nohup + setsid so the process is fully detached from SSH.
+        # The child writes its own PID ($$) so we track the session leader,
+        # not the intermediate setsid parent which exits immediately.
         detached_cmd = (
-            f'nohup setsid bash -lc \'sg docker -c "{raw_cmd}" > {log_path} 2>&1; '
+            f"nohup setsid bash -lc '"
+            f'echo $$ > {pid_path}; sg docker -c "{raw_cmd}" > {log_path} 2>&1; '
             f"echo $? > {exit_code_path}' &\n"
-            f"echo $! > {pid_path}\n"
             f"disown\n"
             f"sleep 1\n"
             f"echo LAUNCHED"
         )
-        _stdin, stdout, _stderr = self.ssh_client.exec_command(detached_cmd)
+        _stdin, stdout, _stderr = self.ssh_client.exec_command(detached_cmd, timeout=30)
         launch_output = stdout.read().decode().strip()
         if "LAUNCHED" not in launch_output:
             raise RuntimeError(f"Failed to launch detached eval: {launch_output}")
         console.print("[green]✓ Evaluation launched (detached)[/green]")
 
         # Tail the log over SSH, reconnecting if the connection drops
-
         last_offset = 0
         poll_interval = 10
-        while True:
+        max_reconnect_attempts = 10
+        reconnect_failures = 0
+        # 24h overall deadline for the evaluation
+        deadline = time.time() + 24 * 3600
+        ssh_exceptions = (OSError, EOFError)
+        if paramiko is not None:
+            ssh_exceptions = (OSError, EOFError, paramiko.SSHException)
+
+        while time.time() < deadline:
             try:
                 # Check if process is still running
-                check_cmd = f"cat {exit_code_path} 2>/dev/null || (kill -0 $(cat {pid_path}) 2>/dev/null && echo RUNNING || echo DEAD)"
+                check_cmd = (
+                    f"cat {exit_code_path} 2>/dev/null || "
+                    f"(kill -0 $(cat {pid_path}) 2>/dev/null "
+                    f"&& echo RUNNING || echo DEAD)"
+                )
                 _sin, sout, _serr = self.ssh_client.exec_command(check_cmd)
                 status = sout.read().decode().strip()
 
@@ -654,6 +667,9 @@ class AzureProvider(InfrastructureProvider):
                         console.print(line)
                     last_offset += len(new_output.encode())
 
+                # Reset reconnect counter on successful poll
+                reconnect_failures = 0
+
                 # Check completion
                 if status == "RUNNING":
                     await asyncio.sleep(poll_interval)
@@ -662,19 +678,36 @@ class AzureProvider(InfrastructureProvider):
                     self._error_occurred = True
                     raise RuntimeError("Evaluation process died unexpectedly")
                 else:
-                    # status is the exit code
-                    exit_code = int(status)
+                    # status should be the exit code
+                    try:
+                        exit_code = int(status)
+                    except ValueError:
+                        # Transient read — file may be partially written
+                        await asyncio.sleep(poll_interval)
+                        continue
                     break
-            except (OSError, EOFError):
+            except ssh_exceptions:
                 # SSH connection dropped — reconnect
-                console.print("[yellow]SSH connection lost, reconnecting...[/yellow]")
+                reconnect_failures += 1
+                if reconnect_failures > max_reconnect_attempts:
+                    self._error_occurred = True
+                    raise RuntimeError(
+                        f"SSH reconnect failed after {max_reconnect_attempts} attempts"
+                    )
+                console.print(
+                    f"[yellow]SSH connection lost, reconnecting "
+                    f"(attempt {reconnect_failures}/{max_reconnect_attempts})...[/yellow]"
+                )
                 await asyncio.sleep(10)
                 try:
-                    await self._connect_ssh()
+                    await self._wait_for_ssh()
                     console.print("[green]✓ SSH reconnected[/green]")
                 except Exception:
                     console.print("[yellow]Reconnect failed, retrying in 30s...[/yellow]")
                     await asyncio.sleep(30)
+        else:
+            self._error_occurred = True
+            raise RuntimeError("Evaluation timed out (exceeded 24h deadline)")
 
         if exit_code != 0:
             self._error_occurred = True

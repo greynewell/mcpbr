@@ -28,6 +28,7 @@ from .mcptoolbench import MCPToolBenchmark
 from .mlagentbench import MLAgentBenchBenchmark
 from .mmmu import MMMUBenchmark
 from .repoqa import RepoQABenchmark
+from .supermodel import SupermodelBenchmark
 from .swebench import SWEBenchmark
 from .terminalbench import TerminalBenchBenchmark
 from .toolbench import ToolBenchBenchmark
@@ -67,6 +68,7 @@ __all__ = [
     "MMMUBenchmark",
     "LongBenchBenchmark",
     "AdversarialBenchmark",
+    "SupermodelBenchmark",
     "BENCHMARK_REGISTRY",
     "create_benchmark",
     "list_benchmarks",
@@ -106,6 +108,7 @@ BENCHMARK_REGISTRY: dict[str, type[Benchmark]] = {
     "mmmu": MMMUBenchmark,
     "longbench": LongBenchBenchmark,
     "adversarial": AdversarialBenchmark,
+    "supermodel": SupermodelBenchmark,
 }
 
 

@@ -1,0 +1,33 @@
+# Supermodel Circular Dependencies Benchmark (PR-based ground truth)
+#
+# Usage:
+#   uv run mcpbr run --config config/supermodel-circular-deps-pr.yaml
+#
+# Add tasks below when PRs that fix circular imports are identified.
+
+benchmark: "supermodel"
+analysis_type: "circular-deps"
+
+tasks: []
+  # Example:
+  # - id: webpack_circular_fix
+  #   repo: webpack/webpack
+  #   pr_number: 11111
+  #   merge_commit: "789abc..."
+  #   language: typescript
+  #   description: "Refactored to break circular imports in module resolution"
+
+supermodel_api_base: "https://staging.api.supermodeltools.com"
+supermodel_api_key: null
+resolved_threshold: 0.8
+
+mcp_server:
+  name: "filesystem"
+  command: "npx"
+  args: ["-y", "@modelcontextprotocol/server-filesystem", "{workdir}"]
+
+provider: "anthropic"
+agent_harness: "claude-code"
+model: "claude-sonnet-4-20250514"
+timeout_seconds: 600
+max_iterations: 30

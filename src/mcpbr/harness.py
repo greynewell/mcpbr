@@ -230,8 +230,16 @@ def agent_result_to_dict(
             data["eval_error"] = eval_result.error
 
         # Save dead-code benchmark metrics (precision/recall/F1)
-        for metric in ["precision", "recall", "f1_score", "true_positives",
-                       "false_positives", "false_negatives", "found", "expected"]:
+        for metric in [
+            "precision",
+            "recall",
+            "f1_score",
+            "true_positives",
+            "false_positives",
+            "false_negatives",
+            "found",
+            "expected",
+        ]:
             if getattr(eval_result, metric, None) is not None:
                 data[metric] = getattr(eval_result, metric)
     else:
@@ -1163,6 +1171,17 @@ async def run_evaluation(
     benchmark_kwargs: dict[str, Any] = {}
     if config.benchmark == "cybergym":
         benchmark_kwargs["level"] = config.cybergym_level
+    elif config.benchmark == "supermodel":
+        if config.analysis_type:
+            benchmark_kwargs["analysis_type"] = config.analysis_type
+        if config.tasks:
+            benchmark_kwargs["tasks"] = config.tasks
+        benchmark_kwargs["supermodel_api_base"] = config.supermodel_api_base
+        if config.supermodel_api_key:
+            benchmark_kwargs["supermodel_api_key"] = config.supermodel_api_key
+        benchmark_kwargs["resolved_threshold"] = config.resolved_threshold
+        if config.ground_truth_dir:
+            benchmark_kwargs["ground_truth_dir"] = config.ground_truth_dir
 
     benchmark = create_benchmark(config.benchmark, **benchmark_kwargs)
 

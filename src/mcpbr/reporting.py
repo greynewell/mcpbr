@@ -17,6 +17,18 @@ if TYPE_CHECKING:
     from .statistics import ComprehensiveStatistics
 
 
+def _format_prf1(result: dict | None) -> str:
+    """Format precision/recall/F1 as a compact string for display."""
+    if not result:
+        return "[dim]-[/dim]"
+    p = result.get("precision")
+    r = result.get("recall")
+    f1 = result.get("f1_score")
+    if p is None or r is None or f1 is None:
+        return "[dim]-[/dim]"
+    return f"{p:.2f}/{r:.2f}/{f1:.2f}"
+
+
 def format_runtime(seconds: float) -> str:
     """Format runtime in seconds to human-readable format.
 
@@ -840,10 +852,20 @@ def print_summary(results: "EvaluationResults", console: Console) -> None:
     console.print()
     console.print("[bold]Per-Task Results[/bold]")
 
+    # Check if any task has P/R/F1 metrics (supermodel/dead-code benchmarks)
+    has_prf1 = any(
+        (task.mcp and task.mcp.get("precision") is not None)
+        or (task.baseline and task.baseline.get("precision") is not None)
+        for task in results.tasks
+    )
+
     task_table = Table()
     task_table.add_column("Instance ID", style="dim")
     task_table.add_column("MCP", justify="center")
     task_table.add_column("Baseline", justify="center")
+    if has_prf1:
+        task_table.add_column("MCP P/R/F1", justify="center")
+        task_table.add_column("BL P/R/F1", justify="center")
     task_table.add_column("Error", style="red", max_width=50)
 
     for task in results.tasks:
@@ -870,7 +892,14 @@ def print_summary(results: "EvaluationResults", console: Console) -> None:
         if len(error_msg) > 50:
             error_msg = error_msg[:47] + "..."
 
-        task_table.add_row(task.instance_id, mcp_status, baseline_status, error_msg)
+        if has_prf1:
+            mcp_prf1 = _format_prf1(task.mcp) if task.mcp else "[dim]-[/dim]"
+            bl_prf1 = _format_prf1(task.baseline) if task.baseline else "[dim]-[/dim]"
+            task_table.add_row(
+                task.instance_id, mcp_status, baseline_status, mcp_prf1, bl_prf1, error_msg
+            )
+        else:
+            task_table.add_row(task.instance_id, mcp_status, baseline_status, error_msg)
 
     console.print(task_table)
 

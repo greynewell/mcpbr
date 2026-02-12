@@ -998,7 +998,7 @@ class ClaudeCodeHarness:
                 if self.mcp_server.system_prompt_append:
                     mcp_append_prompt = self.mcp_server.system_prompt_append
 
-            claude_args_str = " ".join(claude_args)
+            claude_args_str = " ".join(shlex.quote(a) for a in claude_args)
 
             # Run Claude Code (MCP server already registered above)
             # Use shlex.quote() to prevent shell injection

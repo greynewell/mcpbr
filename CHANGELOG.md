@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Cryptography dependency update** (#447): Bumped `cryptography` from 46.0.4 to 46.0.5
+  to address CVE-2026-26007 (malicious public key could reveal private key portions on
+  binary elliptic curves)
 - **Sandbox seccomp default-deny allowlist** (#417): Strict sandbox mode now uses a seccomp
   allowlist (default-deny) instead of a blocklist, preventing bypass via unlisted syscalls
 - **Shell injection prevention in infrastructure providers** (#421, #422): `python_version`
@@ -62,6 +65,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Azure SSH-resilient eval execution** (#446): Remote evaluation on Azure VMs now runs via
+  `nohup setsid` so the process survives SSH disconnects (laptop sleep, network hiccups). The
+  local orchestrator polls the log file and automatically reconnects if the SSH session drops,
+  with a 24-hour deadline and max 10 reconnect attempts
+- **Azure Slack notifications** (#446): Azure VMs now install `mcpbr[slack]` instead of bare
+  `mcpbr`, so `slack_sdk` is available for lifecycle notifications on remote runs
+- **Optional slack_sdk test resilience**: Slack bot notification tests now skip gracefully when
+  `slack_sdk` is not installed, instead of failing with `ModuleNotFoundError`
 - **MCP log directory permission error** (#451): Claude CLI running as non-root `mcpbr` user
   could fail with `EACCES` when creating MCP log directories under `~/.cache/`. The home
   directory and `.cache` subdirectory are now explicitly created and owned by the `mcpbr` user

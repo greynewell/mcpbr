@@ -606,9 +606,12 @@ async def _run_mcp_evaluation(
         if profiler:
             profiler.sample_memory()
 
-        if agent_result.patch:
+        # Evaluate if there's a patch OR the benchmark uses file-based evaluation
+        # (e.g. SupermodelBenchmark reads REPORT.json, not git diffs)
+        should_evaluate = agent_result.patch or getattr(benchmark, "evaluate_without_patch", False)
+        if should_evaluate:
             eval_result_dict = await asyncio.wait_for(
-                benchmark.evaluate(env, task, agent_result.patch),
+                benchmark.evaluate(env, task, agent_result.patch or ""),
                 timeout=config.eval_timeout_seconds,
             )
             # Convert benchmark result format to EvaluationResult-like object
@@ -780,9 +783,12 @@ async def _run_baseline_evaluation(
         if profiler:
             profiler.sample_memory()
 
-        if agent_result.patch:
+        # Evaluate if there's a patch OR the benchmark uses file-based evaluation
+        # (e.g. SupermodelBenchmark reads REPORT.json, not git diffs)
+        should_evaluate = agent_result.patch or getattr(benchmark, "evaluate_without_patch", False)
+        if should_evaluate:
             eval_result_dict = await asyncio.wait_for(
-                benchmark.evaluate(env, task, agent_result.patch),
+                benchmark.evaluate(env, task, agent_result.patch or ""),
                 timeout=config.eval_timeout_seconds,
             )
             # Convert benchmark result format to EvaluationResult-like object

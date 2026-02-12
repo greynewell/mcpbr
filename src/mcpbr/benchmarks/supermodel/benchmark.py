@@ -375,6 +375,19 @@ are better than false negatives for this analysis."""
         if is_mcp:
             try:
                 analysis_json = await self._get_analysis(repo_dir, instance_id, scope_prefix)
+
+                # Cap candidates to avoid overwhelming the agent (MCP tool result
+                # size limits and context window constraints make very large files
+                # unusable). 500 candidates is generous; typical PRs touch <100.
+                max_candidates = 500
+                for key in ("deadCodeCandidates", "candidates", "items"):
+                    if key in analysis_json and len(analysis_json[key]) > max_candidates:
+                        total = len(analysis_json[key])
+                        analysis_json[key] = analysis_json[key][:max_candidates]
+                        logger.warning(
+                            f"Truncated {key} from {total} to {max_candidates} candidates"
+                        )
+
                 analysis_path = Path(host_workdir) / self._endpoint.analysis_filename
                 analysis_path.write_text(json.dumps(analysis_json, indent=2))
                 logger.info(f"Placed analysis at {analysis_path}")

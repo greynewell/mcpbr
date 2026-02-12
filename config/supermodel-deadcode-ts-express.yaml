@@ -20,6 +20,11 @@ tasks:
     ground_truth_file: "~/.cache/mcpbr/supermodel_ground_truth/dead_code_ts_express_app.json"
     description: "Dead code detection in a 35-file TypeScript Express.js app"
 
+mcp_server:
+  name: "filesystem"
+  command: "npx"
+  args: ["-y", "@modelcontextprotocol/server-filesystem", "{workdir}"]
+
 supermodel_api_base: "https://staging.api.supermodeltools.com"
 supermodel_api_key: null
 resolved_threshold: 0.5

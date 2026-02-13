@@ -215,8 +215,9 @@ I/O in this task. Do NOT use the built-in Read/Write tools.
 YOUR ONLY JOB:
 
 1. Read `{analysis_file}` using the filesystem read_text_file tool.
-2. Extract the deadCodeCandidates array.
-3. Write REPORT.json using the filesystem write_file tool with EVERY candidate.
+   The file is compact JSON with a `deadCodeCandidates` array.
+   Each entry has: file, name, type.
+2. Write REPORT.json using the filesystem write_file tool with EVERY candidate.
    Do NOT filter, validate, or remove any candidates. Include ALL of them.
 
 REPORT.json format:
@@ -228,7 +229,9 @@ REPORT.json format:
   "analysis_complete": true
 }}
 
-Type should be one of: function, class, method, const.
+If the analysis file is too large for a single read, use Bash with jq:
+  jq '[.deadCodeCandidates[] | {{file, name, type, reason: "unreachable"}}]' {analysis_file} > /tmp/candidates.json
+  Then wrap it: jq '{{dead_code: ., analysis_complete: true}}' /tmp/candidates.json > REPORT.json
 
 CRITICAL RULES:
 - Include EVERY candidate from the analysis file. Do NOT skip any.
@@ -397,10 +400,10 @@ are better than false negatives for this analysis."""
                     )
 
                 # Slim down the analysis for agent consumption:
-                # Strip verbose fields (code snippets, descriptions) — agent
-                # only needs file/name/type. With just these fields, even 1000+
-                # candidates stay under 100KB which is well within read limits.
-                keep_fields = {"file", "name", "type", "reason", "confidence"}
+                # Keep only file/name/type per candidate (evaluation uses file+name).
+                # Use compact JSON to stay under MCP read_text_file token limits
+                # (~100K chars). At ~45 chars/entry, 2000 candidates ≈ 90KB.
+                keep_fields = {"file", "name", "type"}
                 for key in ("deadCodeCandidates", "candidates", "items"):
                     if key in analysis_json:
                         items = analysis_json[key]
@@ -410,20 +413,20 @@ are better than false negatives for this analysis."""
                         analysis_json[key] = items
 
                 # Strip top-level keys the agent doesn't need.
-                # Keep only metadata + the candidate list; drop aliveCode,
+                # Keep only the candidate list; drop metadata, aliveCode,
                 # entryPoints, sourceCode, ast, rawGraph, etc.
                 candidate_key = None
                 for k in ("deadCodeCandidates", "candidates", "items"):
                     if k in analysis_json:
                         candidate_key = k
                         break
-                keep_top_keys = {"metadata", candidate_key} if candidate_key else {"metadata"}
+                keep_top_keys = {candidate_key} if candidate_key else set()
                 for drop_key in list(analysis_json.keys()):
                     if drop_key not in keep_top_keys:
                         analysis_json.pop(drop_key)
 
                 analysis_path = Path(host_workdir) / self._endpoint.analysis_filename
-                analysis_path.write_text(json.dumps(analysis_json, indent=2))
+                analysis_path.write_text(json.dumps(analysis_json, separators=(",", ":")))
                 logger.info(f"Placed analysis at {analysis_path}")
             except Exception as e:
                 logger.error(f"Failed to get Supermodel analysis for {instance_id}: {e}")

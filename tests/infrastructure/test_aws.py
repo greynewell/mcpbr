@@ -1,6 +1,7 @@
 """Tests for AWS EC2 infrastructure provider."""
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -405,11 +406,13 @@ class TestCleanup:
 
         mock_client.close.assert_called_once()
 
-    async def test_cleanup_preserve_on_error(self, aws_provider: AWSProvider) -> None:
+    async def test_cleanup_preserve_on_error(
+        self, aws_provider: AWSProvider, tmp_path: Path
+    ) -> None:
         """Test cleanup preserves instance when error occurred and preserve_on_error is True."""
         aws_provider.instance_id = "i-1234567890abcdef0"
         aws_provider.instance_ip = "1.2.3.4"
-        aws_provider.ssh_key_path = Path("/tmp/key")
+        aws_provider.ssh_key_path = tmp_path / "key"
         aws_provider._error_occurred = True
         aws_provider.aws_config.preserve_on_error = True
 
@@ -439,11 +442,12 @@ class TestCleanup:
         self,
         mock_run: MagicMock,
         aws_provider: AWSProvider,
+        tmp_path: Path,
     ) -> None:
         """Test cleanup skips termination when auto_shutdown is False."""
         aws_provider.instance_id = "i-1234567890abcdef0"
         aws_provider.instance_ip = "1.2.3.4"
-        aws_provider.ssh_key_path = Path("/tmp/key")
+        aws_provider.ssh_key_path = tmp_path / "key"
         aws_provider.aws_config.auto_shutdown = False
 
         await aws_provider.cleanup()
@@ -662,3 +666,134 @@ class TestSSHCIDRSafety:
         with patch("mcpbr.infrastructure.aws.subprocess.run", return_value=mock_result):
             cidr = AWSProvider._get_ssh_cidr()
             assert cidr == "203.0.113.42/32"
+
+
+# ============================================================================
+# Artifact Download Safety Tests (#393)
+# ============================================================================
+
+
+class TestArtifactDownloadSafety:
+    """Tests for #393: Download all results before cleanup."""
+
+    def test_init_flags(self, aws_provider: AWSProvider) -> None:
+        """Test that tracking flags are initialized correctly."""
+        assert aws_provider._artifacts_collected is False
+        assert aws_provider._remote_output_dir is None
+
+    async def test_collect_artifacts_retry_succeeds(
+        self, aws_provider: AWSProvider, tmp_path: Path
+    ) -> None:
+        """Test collect_artifacts retry succeeds on second attempt."""
+        mock_client = MagicMock()
+        aws_provider.ssh_client = mock_client
+        aws_provider._remote_output_dir = "/home/ubuntu/.mcpbr_run_12345"
+
+        call_count = 0
+
+        def mock_recursive_download(_sftp: Any, _remote_dir: str, local_dir: Path) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise IOError("Transient SFTP failure")
+            (local_dir / "results.json").write_text("{}")
+
+        aws_provider._recursive_download = mock_recursive_download
+
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
+        output_dir = tmp_path / "artifacts"
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await aws_provider.collect_artifacts(output_dir)
+
+        assert aws_provider._artifacts_collected is True
+        assert result is not None
+
+    async def test_collect_artifacts_all_retries_fail(
+        self, aws_provider: AWSProvider, tmp_path: Path
+    ) -> None:
+        """Test collect_artifacts raises RuntimeError when all retries fail."""
+        mock_client = MagicMock()
+        aws_provider.ssh_client = mock_client
+        aws_provider._remote_output_dir = "/home/ubuntu/.mcpbr_run_12345"
+
+        def mock_recursive_download(_sftp: Any, _remote_dir: str, _local_dir: Path) -> None:
+            raise IOError("Persistent failure")
+
+        aws_provider._recursive_download = mock_recursive_download
+
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
+        output_dir = tmp_path / "artifacts"
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            with pytest.raises(RuntimeError, match="Failed to download artifacts"):
+                await aws_provider.collect_artifacts(output_dir)
+
+        assert aws_provider._artifacts_collected is False
+
+    @patch("mcpbr.infrastructure.aws.subprocess.run")
+    async def test_cleanup_preserves_instance_when_artifacts_not_collected(
+        self, mock_run: MagicMock, aws_provider: AWSProvider, tmp_path: Path
+    ) -> None:
+        """Test cleanup preserves instance when artifacts not collected."""
+        aws_provider.instance_id = "i-12345"
+        aws_provider.instance_ip = "1.2.3.4"
+        aws_provider.ssh_key_path = tmp_path / "key"
+        aws_provider._remote_output_dir = "/home/ubuntu/.mcpbr_run_12345"
+        aws_provider._artifacts_collected = False
+
+        await aws_provider.cleanup()
+
+        mock_run.assert_not_called()
+
+    @patch("mcpbr.infrastructure.aws.subprocess.run")
+    async def test_cleanup_deletes_instance_when_artifacts_collected(
+        self, mock_run: MagicMock, aws_provider: AWSProvider
+    ) -> None:
+        """Test cleanup deletes instance when artifacts collected."""
+        aws_provider.instance_id = "i-12345"
+        aws_provider._remote_output_dir = "/home/ubuntu/.mcpbr_run_12345"
+        aws_provider._artifacts_collected = True
+        mock_run.return_value = Mock(returncode=0)
+
+        await aws_provider.cleanup()
+
+        calls = mock_run.call_args_list
+        assert any("terminate-instances" in str(call) for call in calls)
+
+    @patch("mcpbr.infrastructure.aws.subprocess.run")
+    async def test_cleanup_force_overrides_artifact_check(
+        self, mock_run: MagicMock, aws_provider: AWSProvider
+    ) -> None:
+        """Test cleanup(force=True) overrides artifact check."""
+        aws_provider.instance_id = "i-12345"
+        aws_provider._remote_output_dir = "/home/ubuntu/.mcpbr_run_12345"
+        aws_provider._artifacts_collected = False
+        mock_run.return_value = Mock(returncode=0)
+
+        await aws_provider.cleanup(force=True)
+
+        calls = mock_run.call_args_list
+        assert any("terminate-instances" in str(call) for call in calls)
+
+    async def test_collect_artifacts_uses_stored_remote_dir(
+        self, aws_provider: AWSProvider, tmp_path: Path
+    ) -> None:
+        """Test collect_artifacts uses stored _remote_output_dir."""
+        mock_client = MagicMock()
+        aws_provider.ssh_client = mock_client
+        aws_provider._remote_output_dir = "/home/ubuntu/.mcpbr_run_stored"
+
+        def mock_recursive_download(_sftp: Any, remote_dir: str, local_dir: Path) -> None:
+            assert remote_dir == "/home/ubuntu/.mcpbr_run_stored"
+            (local_dir / "results.json").write_text("{}")
+
+        aws_provider._recursive_download = mock_recursive_download
+
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
+        output_dir = tmp_path / "artifacts"
+        await aws_provider.collect_artifacts(output_dir)

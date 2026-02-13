@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, Mock, mock_open, patch
 
 import pytest
@@ -504,11 +505,12 @@ class TestCleanup:
         self,
         azure_provider: AzureProvider,
         capsys: pytest.CaptureFixture[str],
+        tmp_path: Path,
     ) -> None:
         """Test VM deletion when preserve_on_error=True and error occurred."""
         azure_provider.vm_name = "test-vm"
         azure_provider.vm_ip = "1.2.3.4"
-        azure_provider.ssh_key_path = Path("/tmp/key")
+        azure_provider.ssh_key_path = tmp_path / "key"
         azure_provider._error_occurred = True
         azure_provider.azure_config.preserve_on_error = True
 
@@ -524,11 +526,12 @@ class TestCleanup:
         mock_run: MagicMock,
         azure_provider: AzureProvider,
         capsys: pytest.CaptureFixture[str],
+        tmp_path: Path,
     ) -> None:
         """Test VM deletion when auto_shutdown=False."""
         azure_provider.vm_name = "test-vm"
         azure_provider.vm_ip = "1.2.3.4"
-        azure_provider.ssh_key_path = Path("/tmp/key")
+        azure_provider.ssh_key_path = tmp_path / "key"
         azure_provider.azure_config.auto_shutdown = False
 
         await azure_provider.cleanup()
@@ -1886,14 +1889,17 @@ class TestArtifactCollection:
 
         azure_provider._ssh_exec = mock_ssh_exec
 
+        def mock_recursive_download(_sftp: Any, _remote_dir: str, local_dir: Path) -> None:
+            (local_dir / "results.json").write_text("{}")
+
+        azure_provider._recursive_download = mock_recursive_download
+
         mock_sftp = MagicMock()
-        mock_sftp.listdir_attr.return_value = []
         mock_client.open_sftp.return_value = mock_sftp
 
         output_dir = tmp_path / "artifacts"
 
-        with patch("os.walk", return_value=[]):
-            await azure_provider.collect_artifacts(output_dir)
+        await azure_provider.collect_artifacts(output_dir)
 
         # Verify directory was created
         assert output_dir.exists()
@@ -1947,15 +1953,16 @@ class TestArtifactCollection:
 
         azure_provider._ssh_exec = mock_ssh_exec
 
+        def mock_recursive_download(_sftp: Any, _remote_dir: str, local_dir: Path) -> None:
+            (local_dir / "results.json").write_text("{}")
+            (local_dir / "test.txt").write_text("test")
+
+        azure_provider._recursive_download = mock_recursive_download
+
         mock_sftp = MagicMock()
-        mock_sftp.listdir_attr.return_value = []
         mock_client.open_sftp.return_value = mock_sftp
 
         output_dir = tmp_path / "artifacts"
-
-        # Create a test file
-        output_dir.mkdir(parents=True)
-        (output_dir / "test.txt").write_text("test")
 
         result = await azure_provider.collect_artifacts(output_dir)
 
@@ -2034,13 +2041,16 @@ class TestArtifactCollection:
 
         azure_provider._ssh_exec = mock_ssh_exec
 
+        def mock_recursive_download(_sftp: Any, _remote_dir: str, local_dir: Path) -> None:
+            (local_dir / "results.json").write_text("{}")
+            (local_dir / "test.txt").write_text("test")
+
+        azure_provider._recursive_download = mock_recursive_download
+
         mock_sftp = MagicMock()
-        mock_sftp.listdir_attr.return_value = []
         mock_client.open_sftp.return_value = mock_sftp
 
         output_dir = tmp_path / "artifacts"
-        output_dir.mkdir(parents=True)
-        (output_dir / "test.txt").write_text("test")
 
         result = await azure_provider.collect_artifacts(output_dir)
 
@@ -2157,3 +2167,182 @@ class TestSFTPRecursiveDownload:
 
         # Verify file was downloaded (metadata preservation is implicit in listdir_attr)
         mock_sftp.get.assert_called_once()
+
+
+# ============================================================================
+# Artifact Download Safety Tests (#393)
+# ============================================================================
+
+
+class TestArtifactDownloadSafety:
+    """Tests for #393: Download all results before cleanup."""
+
+    def test_init_flags(self, azure_provider: AzureProvider) -> None:
+        """Test that tracking flags are initialized correctly."""
+        assert azure_provider._artifacts_collected is False
+        assert azure_provider._remote_output_dir is None
+
+    async def test_download_results_stores_remote_output_dir(
+        self, azure_provider: AzureProvider
+    ) -> None:
+        """Test that _download_results stores the remote output dir."""
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        async def mock_ssh_exec(cmd, timeout=300):
+            return 0, "/home/azureuser/.mcpbr_run_12345", ""
+
+        azure_provider._ssh_exec = mock_ssh_exec
+
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
+        with patch(
+            "builtins.open", mock_open(read_data='{"metadata": {}, "summary": {}, "tasks": []}')
+        ):
+            with patch("pathlib.Path.unlink"):
+                await azure_provider._download_results()
+
+        assert azure_provider._remote_output_dir == "/home/azureuser/.mcpbr_run_12345"
+
+    async def test_sftp_closed_on_download_error(self, azure_provider: AzureProvider) -> None:
+        """Test Azure SFTP is closed even when download fails."""
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+
+        async def mock_ssh_exec(cmd, timeout=300):
+            return 0, "/home/azureuser/.mcpbr_run_12345", ""
+
+        azure_provider._ssh_exec = mock_ssh_exec
+
+        mock_sftp = MagicMock()
+        mock_sftp.get.side_effect = IOError("SFTP download failed")
+        mock_client.open_sftp.return_value = mock_sftp
+
+        with pytest.raises(IOError):
+            with patch("pathlib.Path.unlink"):
+                await azure_provider._download_results()
+
+        mock_sftp.close.assert_called_once()
+
+    async def test_collect_artifacts_retry_succeeds_on_second_attempt(
+        self, azure_provider: AzureProvider, tmp_path: Path
+    ) -> None:
+        """Test collect_artifacts retry succeeds on second attempt."""
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+        azure_provider._remote_output_dir = "/home/azureuser/.mcpbr_run_12345"
+
+        call_count = 0
+
+        def mock_recursive_download(_sftp: Any, _remote_dir: str, local_dir: Path) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise IOError("Transient SFTP failure")
+            # Second attempt succeeds -- create results.json
+            (local_dir / "results.json").write_text("{}")
+
+        azure_provider._recursive_download = mock_recursive_download
+
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
+        output_dir = tmp_path / "artifacts"
+
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await azure_provider.collect_artifacts(output_dir)
+
+        assert azure_provider._artifacts_collected is True
+        assert result is not None
+        assert result.suffix == ".zip"
+
+    async def test_collect_artifacts_all_retries_fail(
+        self, azure_provider: AzureProvider, tmp_path: Path
+    ) -> None:
+        """Test collect_artifacts raises RuntimeError when all retries fail."""
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+        azure_provider._remote_output_dir = "/home/azureuser/.mcpbr_run_12345"
+
+        def mock_recursive_download(_sftp: Any, _remote_dir: str, _local_dir: Path) -> None:
+            raise IOError("Persistent SFTP failure")
+
+        azure_provider._recursive_download = mock_recursive_download
+
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
+        output_dir = tmp_path / "artifacts"
+
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            with pytest.raises(RuntimeError, match="Failed to download artifacts"):
+                await azure_provider.collect_artifacts(output_dir)
+
+        assert azure_provider._artifacts_collected is False
+
+    async def test_collect_artifacts_sets_flag_on_success(
+        self, azure_provider: AzureProvider, tmp_path: Path
+    ) -> None:
+        """Test _artifacts_collected is True after successful download."""
+        mock_client = MagicMock()
+        azure_provider.ssh_client = mock_client
+        azure_provider._remote_output_dir = "/home/azureuser/.mcpbr_run_12345"
+
+        def mock_recursive_download(_sftp: Any, _remote_dir: str, local_dir: Path) -> None:
+            (local_dir / "results.json").write_text("{}")
+
+        azure_provider._recursive_download = mock_recursive_download
+
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
+        output_dir = tmp_path / "artifacts"
+        await azure_provider.collect_artifacts(output_dir)
+
+        assert azure_provider._artifacts_collected is True
+
+    @patch("mcpbr.infrastructure.azure.subprocess.run")
+    async def test_cleanup_preserves_vm_when_artifacts_not_collected(
+        self, mock_run: MagicMock, azure_provider: AzureProvider, tmp_path: Path
+    ) -> None:
+        """Test cleanup preserves VM when _artifacts_collected is False."""
+        azure_provider.vm_name = "test-vm"
+        azure_provider.vm_ip = "1.2.3.4"
+        azure_provider.ssh_key_path = tmp_path / "key"
+        azure_provider._remote_output_dir = "/home/azureuser/.mcpbr_run_12345"
+        azure_provider._artifacts_collected = False
+
+        await azure_provider.cleanup()
+
+        # VM should NOT be deleted
+        mock_run.assert_not_called()
+
+    @patch("mcpbr.infrastructure.azure.subprocess.run")
+    async def test_cleanup_deletes_vm_when_artifacts_collected(
+        self, mock_run: MagicMock, azure_provider: AzureProvider
+    ) -> None:
+        """Test cleanup deletes VM when _artifacts_collected is True."""
+        azure_provider.vm_name = "test-vm"
+        azure_provider._remote_output_dir = "/home/azureuser/.mcpbr_run_12345"
+        azure_provider._artifacts_collected = True
+        mock_run.return_value = Mock(returncode=0)
+
+        await azure_provider.cleanup()
+
+        mock_run.assert_called_once()
+
+    @patch("mcpbr.infrastructure.azure.subprocess.run")
+    async def test_cleanup_force_overrides_artifact_check(
+        self, mock_run: MagicMock, azure_provider: AzureProvider
+    ) -> None:
+        """Test cleanup(force=True) overrides artifact check."""
+        azure_provider.vm_name = "test-vm"
+        azure_provider._remote_output_dir = "/home/azureuser/.mcpbr_run_12345"
+        azure_provider._artifacts_collected = False
+        mock_run.return_value = Mock(returncode=0)
+
+        await azure_provider.cleanup(force=True)
+
+        # VM should be deleted despite artifacts not being collected
+        mock_run.assert_called_once()

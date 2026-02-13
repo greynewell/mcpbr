@@ -1,6 +1,7 @@
 """GCP Compute Engine infrastructure provider."""
 
 import asyncio
+import contextlib
 import ipaddress
 import json
 import logging
@@ -50,6 +51,8 @@ class GCPProvider(InfrastructureProvider):
         self.ssh_client: paramiko.SSHClient | None = None
         self.ssh_key_path: Path | None = None
         self._error_occurred = False
+        self._artifacts_collected = False
+        self._remote_output_dir: str | None = None
 
     def _determine_machine_type(self) -> str:
         """Map cpu_cores/memory_gb to GCP machine type.
@@ -781,6 +784,7 @@ class GCPProvider(InfrastructureProvider):
             raise FileNotFoundError("No output directory found on instance")
 
         remote_output_dir = stdout.strip()
+        self._remote_output_dir = remote_output_dir
         results_path = f"{remote_output_dir}/results.json"
 
         # Download results.json
@@ -803,38 +807,75 @@ class GCPProvider(InfrastructureProvider):
     async def collect_artifacts(self, output_dir: Path) -> Path | None:
         """Download all logs and results from instance, create ZIP archive.
 
+        Uses retry logic to handle transient SFTP failures. Sets
+        ``_artifacts_collected`` flag on verified success.
+
         Args:
             output_dir: Local directory to store downloaded artifacts.
 
         Returns:
             Path to ZIP archive, or None if no artifacts found.
+
+        Raises:
+            RuntimeError: If all download attempts fail.
         """
         console = Console()
         console.print("[cyan]Collecting artifacts from instance...[/cyan]")
 
-        # Find output directory on instance
-        exit_code, stdout, _stderr = await self._ssh_exec(
-            "find ~ -maxdepth 1 -type d -name '.mcpbr_run_*' | sort -r | head -n1"
-        )
-
-        if exit_code != 0 or not stdout.strip():
-            console.print("[yellow]  No output directory found on instance[/yellow]")
-            return None
-
-        remote_output_dir = stdout.strip()
+        # Use stored remote output dir, fall back to SSH find
+        remote_output_dir = self._remote_output_dir
+        if not remote_output_dir:
+            exit_code, stdout, _stderr = await self._ssh_exec(
+                "find ~ -maxdepth 1 -type d -name '.mcpbr_run_*' | sort -r | head -n1"
+            )
+            if exit_code != 0 or not stdout.strip():
+                console.print("[yellow]Warning: No output directory found on instance[/yellow]")
+                return None
+            remote_output_dir = stdout.strip()
+            self._remote_output_dir = remote_output_dir
 
         # Create local archive directory
         local_archive_dir = output_dir
         local_archive_dir.mkdir(parents=True, exist_ok=True)
 
-        # Recursively download
-        sftp = self.ssh_client.open_sftp()
-        try:
-            await asyncio.to_thread(
-                self._recursive_download, sftp, remote_output_dir, local_archive_dir
+        # Retry loop for SFTP download
+        max_attempts = 3
+        backoff_seconds = [5, 10, 15]
+        last_error: Exception | None = None
+
+        for attempt in range(max_attempts):
+            sftp = None
+            try:
+                sftp = self.ssh_client.open_sftp()
+                await asyncio.to_thread(
+                    self._recursive_download, sftp, remote_output_dir, local_archive_dir
+                )
+
+                # Verify results.json was downloaded
+                if (local_archive_dir / "results.json").exists():
+                    self._artifacts_collected = True
+                    console.print("[green]  Artifacts downloaded and verified[/green]")
+                    break
+                else:
+                    raise RuntimeError("results.json not found after download")
+
+            except Exception as e:
+                last_error = e
+                console.print(
+                    f"[yellow]  Artifact download attempt {attempt + 1}/{max_attempts} "
+                    f"failed: {e}[/yellow]"
+                )
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(backoff_seconds[attempt])
+            finally:
+                if sftp:
+                    with contextlib.suppress(Exception):
+                        sftp.close()
+
+        if not self._artifacts_collected:
+            raise RuntimeError(
+                f"Failed to download artifacts after {max_attempts} attempts: {last_error}"
             )
-        finally:
-            sftp.close()
 
         # Create ZIP archive
         import zipfile
@@ -898,6 +939,27 @@ class GCPProvider(InfrastructureProvider):
             self.gcp_config.auto_shutdown
             and not (self._error_occurred and self.gcp_config.preserve_on_error)
         )
+
+        # Preserve instance if artifacts haven't been downloaded yet
+        if (
+            should_cleanup
+            and not force
+            and self._remote_output_dir
+            and not self._artifacts_collected
+        ):
+            console.print(
+                "[yellow]Warning: Artifacts not fully downloaded. Preserving instance.[/yellow]"
+            )
+            if self.instance_ip and self.ssh_key_path:
+                console.print(
+                    f"[dim]SSH: ssh -i {self.ssh_key_path} "
+                    f"{self._ssh_user}@{self.instance_ip}[/dim]"
+                )
+                console.print(
+                    f"[dim]Delete with: gcloud compute instances delete "
+                    f"{self.instance_name} --zone={self.gcp_config.zone} --quiet[/dim]"
+                )
+            should_cleanup = False
 
         if not should_cleanup:
             console.print(f"[yellow]Instance preserved: {self.instance_name}[/yellow]")

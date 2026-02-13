@@ -1,6 +1,8 @@
 """Tests for GCP Compute Engine infrastructure provider."""
 
-from unittest.mock import MagicMock, Mock, patch
+from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -174,3 +176,154 @@ class TestGCPExportEnvVarsValidation:
 
         with pytest.raises(ValueError, match="Invalid environment variable name"):
             await provider._export_env_vars()
+
+
+# ============================================================================
+# Artifact Download Safety Tests (#393)
+# ============================================================================
+
+
+class TestArtifactDownloadSafety:
+    """Tests for #393: Download all results before cleanup."""
+
+    def test_init_flags(self, mock_config: MagicMock) -> None:
+        """Test that tracking flags are initialized correctly."""
+        from mcpbr.infrastructure.gcp import GCPProvider
+
+        provider = GCPProvider(mock_config)
+        assert provider._artifacts_collected is False
+        assert provider._remote_output_dir is None
+
+    async def test_collect_artifacts_retry_succeeds(
+        self, mock_config: MagicMock, tmp_path: Path
+    ) -> None:
+        """Test collect_artifacts retry succeeds on second attempt."""
+        from mcpbr.infrastructure.gcp import GCPProvider
+
+        provider = GCPProvider(mock_config)
+        mock_client = MagicMock()
+        provider.ssh_client = mock_client
+        provider._remote_output_dir = "/home/user/.mcpbr_run_12345"
+
+        call_count = 0
+
+        def mock_recursive_download(_sftp: Any, _remote_dir: str, local_dir: Path) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise IOError("Transient SFTP failure")
+            (local_dir / "results.json").write_text("{}")
+
+        provider._recursive_download = mock_recursive_download
+
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
+        output_dir = tmp_path / "artifacts"
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await provider.collect_artifacts(output_dir)
+
+        assert provider._artifacts_collected is True
+        assert result is not None
+
+    async def test_collect_artifacts_all_retries_fail(
+        self, mock_config: MagicMock, tmp_path: Path
+    ) -> None:
+        """Test collect_artifacts raises RuntimeError when all retries fail."""
+        from mcpbr.infrastructure.gcp import GCPProvider
+
+        provider = GCPProvider(mock_config)
+        mock_client = MagicMock()
+        provider.ssh_client = mock_client
+        provider._remote_output_dir = "/home/user/.mcpbr_run_12345"
+
+        def mock_recursive_download(_sftp: Any, _remote_dir: str, _local_dir: Path) -> None:
+            raise IOError("Persistent failure")
+
+        provider._recursive_download = mock_recursive_download
+
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
+        output_dir = tmp_path / "artifacts"
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            with pytest.raises(RuntimeError, match="Failed to download artifacts"):
+                await provider.collect_artifacts(output_dir)
+
+        assert provider._artifacts_collected is False
+
+    @patch("mcpbr.infrastructure.gcp.subprocess.run")
+    async def test_cleanup_preserves_instance_when_artifacts_not_collected(
+        self, mock_run: MagicMock, mock_config: MagicMock, tmp_path: Path
+    ) -> None:
+        """Test cleanup preserves instance when artifacts not collected."""
+        from mcpbr.infrastructure.gcp import GCPProvider
+
+        provider = GCPProvider(mock_config)
+        provider.instance_name = "test-instance"
+        provider.instance_ip = "1.2.3.4"
+        provider.ssh_key_path = tmp_path / "key"
+        provider._ssh_user = "testuser"
+        provider._remote_output_dir = "/home/user/.mcpbr_run_12345"
+        provider._artifacts_collected = False
+
+        await provider.cleanup()
+
+        mock_run.assert_not_called()
+
+    @patch("mcpbr.infrastructure.gcp.subprocess.run")
+    async def test_cleanup_deletes_instance_when_artifacts_collected(
+        self, mock_run: MagicMock, mock_config: MagicMock
+    ) -> None:
+        """Test cleanup deletes instance when artifacts collected."""
+        from mcpbr.infrastructure.gcp import GCPProvider
+
+        provider = GCPProvider(mock_config)
+        provider.instance_name = "test-instance"
+        provider._remote_output_dir = "/home/user/.mcpbr_run_12345"
+        provider._artifacts_collected = True
+        mock_run.return_value = Mock(returncode=0)
+
+        await provider.cleanup()
+
+        mock_run.assert_called_once()
+
+    @patch("mcpbr.infrastructure.gcp.subprocess.run")
+    async def test_cleanup_force_overrides_artifact_check(
+        self, mock_run: MagicMock, mock_config: MagicMock
+    ) -> None:
+        """Test cleanup(force=True) overrides artifact check."""
+        from mcpbr.infrastructure.gcp import GCPProvider
+
+        provider = GCPProvider(mock_config)
+        provider.instance_name = "test-instance"
+        provider._remote_output_dir = "/home/user/.mcpbr_run_12345"
+        provider._artifacts_collected = False
+        mock_run.return_value = Mock(returncode=0)
+
+        await provider.cleanup(force=True)
+
+        mock_run.assert_called_once()
+
+    async def test_collect_artifacts_uses_stored_remote_dir(
+        self, mock_config: MagicMock, tmp_path: Path
+    ) -> None:
+        """Test collect_artifacts uses stored _remote_output_dir."""
+        from mcpbr.infrastructure.gcp import GCPProvider
+
+        provider = GCPProvider(mock_config)
+        mock_client = MagicMock()
+        provider.ssh_client = mock_client
+        provider._remote_output_dir = "/home/user/.mcpbr_run_stored"
+
+        def mock_recursive_download(_sftp: Any, remote_dir: str, local_dir: Path) -> None:
+            assert remote_dir == "/home/user/.mcpbr_run_stored"
+            (local_dir / "results.json").write_text("{}")
+
+        provider._recursive_download = mock_recursive_download
+
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
+        output_dir = tmp_path / "artifacts"
+        await provider.collect_artifacts(output_dir)

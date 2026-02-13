@@ -817,6 +817,20 @@ CMD ["/bin/bash"]
         if exit_code != 0:
             raise RuntimeError(f"Failed to create non-root user: {stderr}")
 
+        # For prebuilt SWE-bench images, add conda testbed activation to the
+        # mcpbr user's .bashrc so that interactive shells and any shell that
+        # sources .bashrc will have access to pytest and project dependencies.
+        if env.uses_prebuilt:
+            conda_bashrc = (
+                "source /opt/miniconda3/etc/profile.d/conda.sh\\nconda activate testbed\\n"
+            )
+            exit_code, _, stderr = await env.exec_command(
+                f'echo -e "{conda_bashrc}" >> /home/mcpbr/.bashrc',
+                timeout=10,
+            )
+            if exit_code != 0:
+                logger.warning("Failed to add conda activation to .bashrc: %s", stderr)
+
     async def _setup_repo(
         self,
         env: TaskEnvironment,

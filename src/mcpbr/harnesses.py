@@ -894,6 +894,16 @@ class ClaudeCodeHarness:
         if self.thinking_budget is not None:
             env_exports += f"export MAX_THINKING_TOKENS={shlex.quote(str(self.thinking_budget))}\n"
 
+        # Activate conda testbed environment for prebuilt SWE-bench images
+        # so the agent's Bash tool has access to pytest and project dependencies.
+        # This must come before the env_exports so conda PATH is set first,
+        # then our explicit exports (like ANTHROPIC_API_KEY) layer on top.
+        if env.uses_prebuilt:
+            conda_activate = (
+                "source /opt/miniconda3/etc/profile.d/conda.sh\nconda activate testbed\n"
+            )
+            env_exports = conda_activate + env_exports
+
         await env.exec_command(
             f"cat > {env_file} << 'MCPBR_ENV_EOF'\n{env_exports}MCPBR_ENV_EOF",
             timeout=10,

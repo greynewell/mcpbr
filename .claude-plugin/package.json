@@ -14,7 +14,7 @@
     "agents",
     "evaluation"
   ],
-  "homepage": "https://github.com/greynewell/mcpbr",
+  "homepage": "https://mcpbr.org/",
   "repository": {
     "type": "git",
     "url": "https://github.com/greynewell/mcpbr.git",
@@ -24,7 +24,7 @@
     "url": "https://github.com/greynewell/mcpbr/issues"
   },
   "license": "MIT",
-  "author": "mcpbr Contributors",
+  "author": "Grey Newell <me@greynewell.com> (https://greynewell.com)",
   "files": [
     "plugin.json",
     "skills/"

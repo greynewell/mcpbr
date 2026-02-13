@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [
-    { name = "mcpbr Contributors" }
+    { name = "Grey Newell", email = "me@greynewell.com" }
 ]
 keywords = ["mcp", "model-context-protocol", "swe-bench", "cybergym", "benchmark", "llm", "agents", "evaluation", "security"]
 classifiers = [
@@ -64,11 +64,12 @@ all-providers = ["openai>=1.0.0", "google-generativeai>=0.3.0"]
 mcpbr = "mcpbr.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/greynewell/mcpbr"
+Homepage = "https://mcpbr.org/"
 Repository = "https://github.com/greynewell/mcpbr"
 Documentation = "https://mcpbr.org/"
 Changelog = "https://github.com/greynewell/mcpbr/blob/main/CHANGELOG.md"
 "Bug Tracker" = "https://github.com/greynewell/mcpbr/issues"
+Author = "https://greynewell.com"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mcpbr"]

@@ -3,8 +3,10 @@
   "displayName": "mcpbr - MCP Benchmark Runner",
   "description": "Run and visualize MCP server benchmarks directly from VS Code",
   "version": "0.1.0",
+  "author": "Grey Newell <me@greynewell.com> (https://greynewell.com)",
   "publisher": "greynewell",
   "license": "MIT",
+  "homepage": "https://mcpbr.org/",
   "repository": {
     "type": "git",
     "url": "https://github.com/greynewell/mcpbr"

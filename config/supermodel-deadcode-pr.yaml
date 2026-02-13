@@ -7,7 +7,7 @@
 #
 # Task quality notes:
 #   - tyr_pr258: 95.5% API recall (21/22 GT items detected). Best test case.
-#   - gemini_cli_pr18681: Genuine ts-prune cleanup, well-documented.
+#   - gemini_cli_pr18681: 33% API recall (2/6). 4304 candidates. Test-import gap + misses.
 #   - prisma_pr28485: 0% recall — GT items only referenced by tests (API gap).
 #   - n8n_pr23572: 0% recall — GT items are live code (feature removal, not dead code).
 #   - typescript_pr56817: Staging API cannot complete (too large). Needs cached_analysis.

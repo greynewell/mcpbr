@@ -1,0 +1,34 @@
+# Supermodel Impact Analysis Benchmark (PR-based ground truth)
+#
+# Usage:
+#   uv run mcpbr run --config config/supermodel-impact-pr.yaml
+#
+# Add tasks below when PRs with cross-module changes are identified.
+
+benchmark: "supermodel"
+analysis_type: "impact"
+
+tasks: []
+  # Example:
+  # - id: react_router_v7
+  #   repo: remix-run/react-router
+  #   pr_number: 12345
+  #   merge_commit: "abc123..."
+  #   language: typescript
+  #   scope_prefix: "packages"
+  #   description: "API change that rippled across consumers"
+
+supermodel_api_base: "https://staging.api.supermodeltools.com"
+supermodel_api_key: null
+resolved_threshold: 0.8
+
+mcp_server:
+  name: "filesystem"
+  command: "npx"
+  args: ["-y", "@modelcontextprotocol/server-filesystem", "{workdir}"]
+
+provider: "anthropic"
+agent_harness: "claude-code"
+model: "claude-sonnet-4-20250514"
+timeout_seconds: 600
+max_iterations: 30

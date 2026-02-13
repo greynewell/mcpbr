@@ -228,6 +228,20 @@ def agent_result_to_dict(
 
         if getattr(eval_result, "error", None):
             data["eval_error"] = eval_result.error
+
+        # Save dead-code benchmark metrics (precision/recall/F1)
+        for metric in [
+            "precision",
+            "recall",
+            "f1_score",
+            "true_positives",
+            "false_positives",
+            "false_negatives",
+            "found",
+            "expected",
+        ]:
+            if getattr(eval_result, metric, None) is not None:
+                data[metric] = getattr(eval_result, metric)
     else:
         data["resolved"] = False
         data["patch_applied"] = False
@@ -549,7 +563,7 @@ async def _run_mcp_evaluation(
     try:
         # Track Docker environment creation time
         docker_start = time.time()
-        env = await benchmark.create_environment(task, docker_manager)
+        env = await benchmark.create_environment(task, docker_manager, is_mcp=True)
         docker_end = time.time()
         if profiler:
             profiler.record_docker_startup(docker_end - docker_start)
@@ -592,9 +606,12 @@ async def _run_mcp_evaluation(
         if profiler:
             profiler.sample_memory()
 
-        if agent_result.patch:
+        # Evaluate if there's a patch OR the benchmark uses file-based evaluation
+        # (e.g. SupermodelBenchmark reads REPORT.json, not git diffs)
+        should_evaluate = agent_result.patch or getattr(benchmark, "evaluate_without_patch", False)
+        if should_evaluate:
             eval_result_dict = await asyncio.wait_for(
-                benchmark.evaluate(env, task, agent_result.patch),
+                benchmark.evaluate(env, task, agent_result.patch or ""),
                 timeout=config.eval_timeout_seconds,
             )
             # Convert benchmark result format to EvaluationResult-like object
@@ -736,7 +753,7 @@ async def _run_baseline_evaluation(
     try:
         # Track Docker environment creation time
         docker_start = time.time()
-        env = await benchmark.create_environment(task, docker_manager)
+        env = await benchmark.create_environment(task, docker_manager, is_mcp=False)
         docker_end = time.time()
         if profiler:
             profiler.record_docker_startup(docker_end - docker_start)
@@ -766,9 +783,12 @@ async def _run_baseline_evaluation(
         if profiler:
             profiler.sample_memory()
 
-        if agent_result.patch:
+        # Evaluate if there's a patch OR the benchmark uses file-based evaluation
+        # (e.g. SupermodelBenchmark reads REPORT.json, not git diffs)
+        should_evaluate = agent_result.patch or getattr(benchmark, "evaluate_without_patch", False)
+        if should_evaluate:
             eval_result_dict = await asyncio.wait_for(
-                benchmark.evaluate(env, task, agent_result.patch),
+                benchmark.evaluate(env, task, agent_result.patch or ""),
                 timeout=config.eval_timeout_seconds,
             )
             # Convert benchmark result format to EvaluationResult-like object
@@ -1157,6 +1177,18 @@ async def run_evaluation(
     benchmark_kwargs: dict[str, Any] = {}
     if config.benchmark == "cybergym":
         benchmark_kwargs["level"] = config.cybergym_level
+    elif config.benchmark == "supermodel":
+        if config.analysis_type:
+            benchmark_kwargs["analysis_type"] = config.analysis_type
+        if config.tasks:
+            benchmark_kwargs["tasks"] = config.tasks
+        benchmark_kwargs["supermodel_api_base"] = config.supermodel_api_base
+        if config.supermodel_api_key:
+            benchmark_kwargs["supermodel_api_key"] = config.supermodel_api_key
+        benchmark_kwargs["supermodel_api_timeout"] = config.supermodel_api_timeout
+        benchmark_kwargs["resolved_threshold"] = config.resolved_threshold
+        if config.ground_truth_dir:
+            benchmark_kwargs["ground_truth_dir"] = config.ground_truth_dir
 
     benchmark = create_benchmark(config.benchmark, **benchmark_kwargs)
 
@@ -1998,6 +2030,7 @@ async def run_evaluation(
             "budget_exceeded": budget_exceeded,
             "comparison_mode": config.comparison_mode,
         },
+        "prompt_version": config.prompt_version,
     }
 
     # Add MCP server config(s) to metadata

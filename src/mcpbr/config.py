@@ -19,6 +19,7 @@ VALID_BENCHMARKS = (
     "swe-bench-verified",
     "swe-bench-full",
     "cybergym",
+    "dead-code",
     "gsm8k",
     "humaneval",
     "mcptoolbench",
@@ -46,6 +47,7 @@ VALID_BENCHMARKS = (
     "mmmu",
     "longbench",
     "adversarial",
+    "supermodel",
 )
 VALID_INFRASTRUCTURE_MODES = ("local", "azure", "aws", "gcp", "kubernetes", "cloudflare")
 
@@ -588,6 +590,11 @@ class HarnessConfig(BaseModel):
         description="Custom prompt template for the agent. Use {problem_statement} placeholder.",
     )
 
+    prompt_version: dict[str, str] | None = Field(
+        default=None,
+        description="Prompt version metadata for tracking. E.g., {'mcp_agent': 'v1.0', 'baseline_agent': 'v1.0'}",
+    )
+
     model: str = Field(
         default=DEFAULT_MODEL,
         description="Model ID for the selected provider",
@@ -871,6 +878,42 @@ class HarnessConfig(BaseModel):
         description="Send progress notification every N minutes (0 = disabled).",
     )
 
+    # --- Supermodel Benchmark ---
+    analysis_type: str | None = Field(
+        default=None,
+        description="Supermodel analysis type (dead-code, impact, test-coverage, circular-deps)",
+    )
+
+    tasks: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Task definitions for supermodel benchmark (repos, PRs, commits)",
+    )
+
+    supermodel_api_base: str = Field(
+        default="https://staging.api.supermodeltools.com",
+        description="Base URL for the Supermodel API",
+    )
+
+    supermodel_api_key: str | None = Field(
+        default=None,
+        description="API key for Supermodel API (or use SUPERMODEL_API_KEY env var)",
+    )
+
+    supermodel_api_timeout: int = Field(
+        default=900,
+        description="Max seconds to wait for Supermodel API analysis to complete",
+    )
+
+    resolved_threshold: float = Field(
+        default=0.8,
+        description="Precision & recall threshold to consider a task resolved",
+    )
+
+    ground_truth_dir: str | None = Field(
+        default=None,
+        description="Directory to cache ground truth JSON files",
+    )
+
     @field_validator("notify_progress_interval", "notify_progress_time_minutes")
     @classmethod
     def validate_notify_progress_intervals(cls, v: int) -> int:
@@ -945,6 +988,7 @@ class HarnessConfig(BaseModel):
         if v not in allowed:
             raise ValueError(f"sampling_strategy must be one of {allowed}, got '{v}'")
         return v
+
 
     @field_validator("provider")
     @classmethod

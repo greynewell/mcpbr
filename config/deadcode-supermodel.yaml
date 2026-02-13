@@ -1,0 +1,64 @@
+# Dead Code Detection Benchmark - Supermodel Configuration
+# Uses pre-generated call graph for analysis (implements issue #82 concept)
+
+benchmark: "dead-code"
+sample_size: 3
+
+# Prompt versioning metadata
+prompt_version:
+  mcp_agent: "v1.0"
+  baseline_agent: "v1.0"
+  changelog: "https://github.com/supermodeltools/dead-code-benchmark-corpus/blob/main/prompts/CHANGELOG.md"
+
+# Supermodel MCP - kept for potential API fallback
+mcp_server:
+  name: "supermodel"
+  command: "npx"
+  args:
+    - "-y"
+    - "@supermodeltools/mcp-server@latest"
+  env:
+    SUPERMODEL_API_KEY: "${SUPERMODEL_API_KEY}"
+    SUPERMODEL_BASE_URL: "${SUPERMODEL_BASE_URL}"
+
+provider: "anthropic"
+agent_harness: "claude-code"
+model: "claude-sonnet-4-20250514"
+
+timeout_seconds: 300
+max_concurrent: 1
+max_iterations: 25  # Extra headroom for Supermodel API calls
+
+# Custom prompt using pre-generated call graph
+agent_prompt: |
+  Analyze the codebase and identify ALL dead code (unused functions, classes, variables).
+
+  {problem_statement}
+
+  CRITICAL INSTRUCTIONS - FOLLOW EXACTLY:
+
+  DO NOT call any MCP tools (get_call_graph, get_domain_graph, etc.).
+  DO NOT grep or read source files.
+  The answer is ALREADY COMPUTED for you in a local file.
+
+  EXACT STEPS:
+  1. Read the file `.supermodel/dead-code-analysis.json` (it exists, just read it)
+  2. Read the file `REPORT.json` (required before writing)
+  3. Parse the analysis file - it contains:
+     - "dead_code_candidates": array of strings like "src/file.ts::functionName"
+     - "functions": dict with line numbers for each function
+  4. For each item in dead_code_candidates:
+     - Split on "::" to get file and name
+     - Look up line number from functions dict
+     - Add to dead_code array
+  5. Write REPORT.json with format below
+
+  REPORT.json format:
+  {{
+    "dead_code": [
+      {{"file": "src/file.ts", "name": "functionName", "line": 10, "type": "function"}}
+    ],
+    "analysis_complete": true
+  }}
+
+  This is a 5-minute task. Read graph.json, read REPORT.json, transform data, write REPORT.json. Done.

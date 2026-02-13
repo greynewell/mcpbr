@@ -93,7 +93,7 @@ async def _run_cli_command(
     Returns:
         Tuple of (exit_code, stdout, stderr).
     """
-    full_env = {**os.environ}
+    full_env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
     if env:
         full_env.update(env)
 
@@ -145,7 +145,7 @@ async def _run_cli_streaming(
     Returns:
         Tuple of (exit_code, stdout, stderr).
     """
-    full_env = {**os.environ}
+    full_env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
     if env:
         full_env.update(env)
 
@@ -156,6 +156,7 @@ async def _run_cli_streaming(
         stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        limit=10 * 1024 * 1024,  # 10MB line limit (monorepo analysis JSON can be very large)
     )
 
     stdout_lines: list[str] = []

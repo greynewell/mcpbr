@@ -156,6 +156,7 @@ class HumanEvalBenchmark:
         self,
         task: dict[str, Any],
         docker_manager: DockerEnvironmentManager,
+        is_mcp: bool = False,
     ) -> TaskEnvironment:
         """Create environment for HumanEval task.
 
@@ -164,6 +165,7 @@ class HumanEvalBenchmark:
         Args:
             task: HumanEval task dictionary.
             docker_manager: Docker environment manager.
+            is_mcp: Whether this is for MCP agent (unused in this benchmark).
 
         Returns:
             TaskEnvironment for the task.

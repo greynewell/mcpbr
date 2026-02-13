@@ -396,7 +396,8 @@ are better than false negatives for this analysis."""
                 else:
                     exclude_patterns = task.get("zip_exclude", [])
                     analysis_json = await self._get_analysis(
-                        repo_dir, instance_id, scope_prefix, exclude_patterns
+                        repo_dir, instance_id, scope_prefix, exclude_patterns,
+                        strip_prefix=is_corpus,
                     )
 
                 # Slim down the analysis for agent consumption:
@@ -421,9 +422,18 @@ are better than false negatives for this analysis."""
                             logger.warning(f"Truncated {key} from {total} to {max_candidates}")
                         analysis_json[key] = items
 
-                # Also strip top-level verbose metadata
-                for drop_key in ("sourceCode", "ast", "rawGraph"):
-                    analysis_json.pop(drop_key, None)
+                # Strip top-level keys the agent doesn't need.
+                # Keep only metadata + the candidate list; drop aliveCode,
+                # entryPoints, sourceCode, ast, rawGraph, etc.
+                candidate_key = None
+                for k in ("deadCodeCandidates", "candidates", "items"):
+                    if k in analysis_json:
+                        candidate_key = k
+                        break
+                keep_top_keys = {"metadata", candidate_key} if candidate_key else {"metadata"}
+                for drop_key in list(analysis_json.keys()):
+                    if drop_key not in keep_top_keys:
+                        analysis_json.pop(drop_key)
 
                 analysis_path = Path(host_workdir) / self._endpoint.analysis_filename
                 analysis_path.write_text(json.dumps(analysis_json, indent=2))
@@ -503,6 +513,7 @@ are better than false negatives for this analysis."""
         task_id: str,
         scope_prefix: str | None,
         exclude_patterns: list[str] | None = None,
+        strip_prefix: bool = True,
     ) -> dict:
         """Call Supermodel API and return parsed/filtered analysis.
 
@@ -531,8 +542,10 @@ are better than false negatives for this analysis."""
 
         result = self._endpoint.parse_api_response(raw_response)
 
-        # Strip scope_prefix from file paths so they match the workdir layout
-        if scope_prefix:
+        # Strip scope_prefix from file paths so they match the workdir layout.
+        # Only in corpus mode (strip_prefix=True): workdir content is at root.
+        # In PR mode (strip_prefix=False): scope_prefix dir is preserved in workdir.
+        if scope_prefix and strip_prefix:
             prefix = scope_prefix.rstrip("/") + "/"
             for key in ("deadCodeCandidates", "candidates", "items"):
                 if key in result:

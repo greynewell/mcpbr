@@ -40,20 +40,28 @@ class TestDeadCodeBenchmark:
     def test_load_tasks_filter_by_language(self) -> None:
         """Test filtering by language (category)."""
         benchmark = DeadCodeBenchmark()
+        # Corpus only has typescript tasks, so filtering for python returns empty
         tasks = benchmark.load_tasks(filter_category=["python"])
+        assert len(tasks) == 0
 
+        # Filtering for typescript returns the corpus task
+        tasks = benchmark.load_tasks(filter_category=["typescript"])
         assert len(tasks) > 0
         for task in tasks:
-            assert task["language"] == "python"
+            assert task["language"] == "typescript"
 
     def test_load_tasks_filter_by_difficulty(self) -> None:
         """Test filtering by difficulty."""
         benchmark = DeadCodeBenchmark()
+        # Corpus task is "hard", so filtering for easy returns empty
         tasks = benchmark.load_tasks(filter_difficulty=["easy"])
+        assert len(tasks) == 0
 
+        # Filtering for hard returns the corpus task
+        tasks = benchmark.load_tasks(filter_difficulty=["hard"])
         assert len(tasks) > 0
         for task in tasks:
-            assert task["difficulty"] == "easy"
+            assert task["difficulty"] == "hard"
 
     def test_normalize_task(self) -> None:
         """Test task normalization."""
@@ -83,10 +91,10 @@ class TestDeadCodeBenchmark:
 
         assert result is None
 
-    def test_synthetic_task_structure(self) -> None:
-        """Verify synthetic tasks have correct structure."""
+    def test_corpus_task_structure(self) -> None:
+        """Verify corpus tasks have correct structure."""
         benchmark = DeadCodeBenchmark()
-        tasks = benchmark._generate_synthetic_tasks()
+        tasks = benchmark.load_tasks()
 
         for task in tasks:
             # Required fields

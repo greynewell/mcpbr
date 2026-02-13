@@ -38,6 +38,14 @@ logger = logging.getLogger(__name__)
 _active_managers: list["DockerEnvironmentManager"] = []
 
 
+class ContainerDiedError(RuntimeError):
+    """Raised when a Docker container is no longer running during exec.
+
+    This distinguishes infrastructure failures (OOM kill, resource exhaustion)
+    from application-level errors, enabling targeted retry at the task level.
+    """
+
+
 def _cleanup_on_exit() -> None:
     """Clean up all active managers on process exit."""
     for manager in _active_managers:
@@ -173,13 +181,21 @@ class TaskEnvironment:
         wd = workdir or self.workdir
 
         def _exec() -> tuple[int, str, str]:
-            result = self.container.exec_run(
-                cmd,
-                workdir=wd,
-                demux=True,
-                environment=environment,
-                user=user or "",
-            )
+            try:
+                result = self.container.exec_run(
+                    cmd,
+                    workdir=wd,
+                    demux=True,
+                    environment=environment,
+                    user=user or "",
+                )
+            except docker.errors.APIError as e:
+                if e.status_code == 409:
+                    raise ContainerDiedError(
+                        f"Container {self.instance_id} is no longer running "
+                        f"(likely OOM-killed or crashed)"
+                    ) from e
+                raise
             stdout = result.output[0].decode("utf-8") if result.output[0] else ""
             stderr = result.output[1].decode("utf-8") if result.output[1] else ""
             return result.exit_code, stdout, stderr
@@ -215,22 +231,30 @@ class TaskEnvironment:
         wd = workdir or self.workdir
 
         def _exec_streaming() -> tuple[int, str, str]:
-            # Create the exec instance
-            exec_id = self.container.client.api.exec_create(
-                self.container.id,
-                command,
-                workdir=wd,
-                environment=environment,
-                stdout=True,
-                stderr=True,
-            )
+            try:
+                # Create the exec instance
+                exec_id = self.container.client.api.exec_create(
+                    self.container.id,
+                    command,
+                    workdir=wd,
+                    environment=environment,
+                    stdout=True,
+                    stderr=True,
+                )
 
-            # Start the exec with streaming
-            output_gen = self.container.client.api.exec_start(
-                exec_id,
-                stream=True,
-                demux=True,
-            )
+                # Start the exec with streaming
+                output_gen = self.container.client.api.exec_start(
+                    exec_id,
+                    stream=True,
+                    demux=True,
+                )
+            except docker.errors.APIError as e:
+                if e.status_code == 409:
+                    raise ContainerDiedError(
+                        f"Container {self.instance_id} is no longer running "
+                        f"(likely OOM-killed or crashed)"
+                    ) from e
+                raise
 
             stdout_lines: list[str] = []
             stderr_lines: list[str] = []
